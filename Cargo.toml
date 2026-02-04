@@ -1,0 +1,74 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/living-core",
+    "crates/metabolism",
+    "crates/consciousness",
+    "crates/epistemics",
+    "crates/relational",
+    "crates/structural",
+    "crates/cycle-engine",
+]
+
+[workspace.package]
+version = "0.6.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/mycelix/mycelix-v6-living"
+authors = ["Mycelix Contributors"]
+
+[workspace.dependencies]
+# Internal crates
+living-core = { path = "crates/living-core" }
+metabolism = { path = "crates/metabolism" }
+consciousness = { path = "crates/consciousness" }
+epistemics = { path = "crates/epistemics" }
+relational = { path = "crates/relational" }
+structural = { path = "crates/structural" }
+cycle-engine = { path = "crates/cycle-engine" }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Cryptography
+ed25519-dalek = "2.1"
+sha2 = "0.10"
+blake3 = "1.5"
+
+# Math / linear algebra
+nalgebra = "0.33"
+nalgebra-sparse = "0.10"
+
+# Randomness
+rand = "0.8"
+rand_distr = "0.4"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Testing
+proptest = "1.5"
+
+# UUID
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+[profile.dev]
+opt-level = 0
+debug = true

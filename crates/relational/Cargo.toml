@@ -1,0 +1,18 @@
+[package]
+name = "relational"
+description = "Relational Field: Entangled Pairs, Eros/Attractor Fields, Liminality, Inter-Species"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+living-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

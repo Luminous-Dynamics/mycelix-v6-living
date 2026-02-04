@@ -1,0 +1,30 @@
+# Rust
+target/
+Cargo.lock
+
+# Node
+node_modules/
+dist/
+
+# Environment
+.env
+*.pem
+
+# WASM artifacts
+*.wasm
+
+# Foundry
+cache/
+out/
+broadcast/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

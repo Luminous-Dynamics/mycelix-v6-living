@@ -1,0 +1,24 @@
+[package]
+name = "cycle-engine"
+description = "Metabolism Cycle State Machine orchestrator for the Living Protocol Layer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+living-core = { workspace = true }
+metabolism = { workspace = true }
+consciousness = { workspace = true }
+epistemics = { workspace = true }
+relational = { workspace = true }
+structural = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

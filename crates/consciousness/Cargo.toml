@@ -1,0 +1,25 @@
+[package]
+name = "consciousness"
+description = "Consciousness Field: Temporal K-Vector, Field Interference, Collective Dreaming, Emergent Personhood"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+living-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+nalgebra = { workspace = true }
+
+[features]
+default = []
+tier3-experimental = []
+tier4-aspirational = []
+full = ["tier3-experimental", "tier4-aspirational"]
+
+[dev-dependencies]
+proptest = { workspace = true }

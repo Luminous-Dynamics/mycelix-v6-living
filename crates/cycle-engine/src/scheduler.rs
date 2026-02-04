@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use living_core::{LivingProtocolEvent, LivingResult, LivingProtocolConfig};
+use living_core::{LivingProtocolEvent, LivingResult, LivingProtocolConfig, InMemoryEventBus, EventBus};
 use crate::engine::MetabolismCycleEngine;
 
 /// Async scheduler that drives the metabolism cycle engine.
@@ -79,6 +79,9 @@ impl CycleScheduler {
 }
 
 /// Builder for creating a fully configured cycle engine with all phase handlers.
+///
+/// Creates shared `InMemoryEventBus` and `LivingProtocolConfig`, then constructs
+/// each phase handler with its corresponding primitive engine wired in.
 pub struct CycleEngineBuilder {
     config: LivingProtocolConfig,
 }
@@ -101,48 +104,81 @@ impl CycleEngineBuilder {
         self
     }
 
-    /// Build the engine with all default phase handlers.
+    /// Build the engine with all phase handlers wired to their primitive engines.
     pub fn build(self) -> MetabolismCycleEngine {
         use crate::phase_handlers::*;
         use living_core::CyclePhase;
 
-        let mut engine = MetabolismCycleEngine::new(self.config);
+        // Shared event bus for engines that need one
+        let event_bus: Arc<dyn EventBus> = Arc::new(InMemoryEventBus::new());
 
+        let mut engine = MetabolismCycleEngine::new(self.config.clone());
+
+        // Shadow: ShadowIntegrationEngine (no deps)
         engine.register_handler(
             CyclePhase::Shadow,
-            Box::new(ShadowPhaseHandler::default()),
+            Box::new(ShadowPhaseHandler::new(
+                self.config.shadow.spectral_k_anomaly_threshold,
+                self.config.shadow.clone(),
+            )),
         );
+
+        // Composting: CompostingEngine (config + event_bus)
         engine.register_handler(
             CyclePhase::Composting,
-            Box::new(CompostingPhaseHandler::default()),
+            Box::new(CompostingPhaseHandler::new(
+                self.config.composting.clone(),
+                event_bus.clone(),
+            )),
         );
+
+        // Liminal: LiminalityEngine (no deps)
         engine.register_handler(
             CyclePhase::Liminal,
-            Box::new(LiminalPhaseHandler::default()),
+            Box::new(LiminalPhaseHandler::new()),
         );
+
+        // Negative Capability: NegativeCapabilityEngine (no deps)
         engine.register_handler(
             CyclePhase::NegativeCapability,
-            Box::new(NegativeCapabilityPhaseHandler::default()),
+            Box::new(NegativeCapabilityPhaseHandler::new(
+                self.config.negative_capability.clone(),
+            )),
         );
+
+        // Eros: ErosAttractorEngine (feature flags)
         engine.register_handler(
             CyclePhase::Eros,
-            Box::new(ErosPhaseHandler::default()),
+            Box::new(ErosPhaseHandler::new(self.config.features.clone())),
         );
+
+        // Co-Creation: EntanglementEngine (config)
         engine.register_handler(
             CyclePhase::CoCreation,
-            Box::new(CoCreationPhaseHandler::default()),
+            Box::new(CoCreationPhaseHandler::new(
+                self.config.entanglement.clone(),
+            )),
         );
+
+        // Beauty: BeautyValidityEngine (no deps)
         engine.register_handler(
             CyclePhase::Beauty,
-            Box::new(BeautyPhaseHandler::default()),
+            Box::new(BeautyPhaseHandler::new()),
         );
+
+        // Emergent Personhood: EmergentPersonhoodService (tier4-aspirational feature)
         engine.register_handler(
             CyclePhase::EmergentPersonhood,
-            Box::new(EmergentPersonhoodPhaseHandler::default()),
+            Box::new(EmergentPersonhoodPhaseHandler::new()),
         );
+
+        // Kenosis: KenosisEngine (config + event_bus)
         engine.register_handler(
             CyclePhase::Kenosis,
-            Box::new(KenosisPhaseHandler::default()),
+            Box::new(KenosisPhaseHandler::new(
+                self.config.kenosis.clone(),
+                event_bus,
+            )),
         );
 
         engine
@@ -183,5 +219,19 @@ mod tests {
         }
 
         assert_eq!(engine.cycle_number(), 2);
+    }
+
+    #[test]
+    fn test_builder_with_custom_config() {
+        let mut config = LivingProtocolConfig::default();
+        config.shadow.spectral_k_anomaly_threshold = 0.5;
+        config.kenosis.max_release_per_cycle = 0.10;
+
+        let engine = CycleEngineBuilder::new()
+            .with_config(config)
+            .with_simulated_time(86400.0)
+            .build();
+
+        assert!(!engine.is_running());
     }
 }

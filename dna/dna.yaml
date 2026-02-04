@@ -1,0 +1,40 @@
+---
+manifest_version: "1"
+name: mycelix-living-protocol
+integrity:
+  origin_time: "2025-01-01T00:00:00.000000Z"
+  network_seed: ~
+  properties: ~
+  zomes:
+    - name: living_metabolism_integrity
+      bundled: "../target/wasm32-unknown-unknown/release/living_metabolism_integrity.wasm"
+    - name: living_consciousness_integrity
+      bundled: "../target/wasm32-unknown-unknown/release/living_consciousness_integrity.wasm"
+    - name: living_epistemics_integrity
+      bundled: "../target/wasm32-unknown-unknown/release/living_epistemics_integrity.wasm"
+    - name: living_relational_integrity
+      bundled: "../target/wasm32-unknown-unknown/release/living_relational_integrity.wasm"
+    - name: living_structural_integrity
+      bundled: "../target/wasm32-unknown-unknown/release/living_structural_integrity.wasm"
+coordinator:
+  zomes:
+    - name: living_metabolism
+      bundled: "../target/wasm32-unknown-unknown/release/living_metabolism.wasm"
+      dependencies:
+        - name: living_metabolism_integrity
+    - name: living_consciousness
+      bundled: "../target/wasm32-unknown-unknown/release/living_consciousness.wasm"
+      dependencies:
+        - name: living_consciousness_integrity
+    - name: living_epistemics
+      bundled: "../target/wasm32-unknown-unknown/release/living_epistemics.wasm"
+      dependencies:
+        - name: living_epistemics_integrity
+    - name: living_relational
+      bundled: "../target/wasm32-unknown-unknown/release/living_relational.wasm"
+      dependencies:
+        - name: living_relational_integrity
+    - name: living_structural
+      bundled: "../target/wasm32-unknown-unknown/release/living_structural.wasm"
+      dependencies:
+        - name: living_structural_integrity

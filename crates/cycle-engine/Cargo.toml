@@ -20,5 +20,11 @@ uuid = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 
+[features]
+default = []
+tier3-experimental = ["consciousness/tier3-experimental"]
+tier4-aspirational = ["consciousness/tier4-aspirational"]
+full = ["tier3-experimental", "tier4-aspirational"]
+
 [dev-dependencies]
 proptest = { workspace = true }

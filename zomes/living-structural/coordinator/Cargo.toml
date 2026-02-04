@@ -1,0 +1,17 @@
+[package]
+name = "living_structural"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+getrandom = { workspace = true }
+getrandom_03 = { workspace = true }
+holochain_serialized_bytes = { workspace = true }
+hdk = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+living_structural_integrity = { path = "../integrity" }
+mycelix_shared = { path = "../../shared" }

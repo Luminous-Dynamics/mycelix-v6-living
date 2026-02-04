@@ -128,5 +128,5 @@ export function isGate2Suspended(phase: CyclePhase): boolean {
  */
 export function getTotalCycleDays(): number {
   const { PHASE_DURATIONS } = require('./types');
-  return Object.values(PHASE_DURATIONS).reduce((sum: number, d: number) => sum + d, 0);
+  return (Object.values(PHASE_DURATIONS) as number[]).reduce((sum: number, d: number) => sum + d, 0);
 }

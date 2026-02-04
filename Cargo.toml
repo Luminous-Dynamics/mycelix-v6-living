@@ -64,6 +64,15 @@ proptest = "1.5"
 # UUID
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
+# Holochain (for zome compilation — requires holonix/nix develop)
+hdk = "0.6.0"
+hdi = "0.7.0"
+holochain_integrity_types = "0.6.0"
+holochain_serialized_bytes = "0.0.56"
+holo_hash = { version = "0.6", features = ["hashing"] }
+getrandom = { version = "0.2", features = ["js"] }
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+
 [profile.release]
 opt-level = 3
 lto = true

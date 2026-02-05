@@ -1,6 +1,8 @@
 # Rust
 target/
 Cargo.lock
+proptest-regressions/
+**/proptest-regressions/
 
 # Node
 node_modules/

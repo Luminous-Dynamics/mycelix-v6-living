@@ -27,7 +27,7 @@
 
 use opentelemetry::{
     global,
-    metrics::{Counter, Histogram, Meter, MeterProvider as _},
+    metrics::{Counter, Histogram, Meter, MeterProvider},
     trace::TracerProvider as _,
     KeyValue,
 };
@@ -40,7 +40,7 @@ use opentelemetry_sdk::{
 };
 use std::sync::OnceLock;
 use std::time::Duration;
-use tracing_subscriber::prelude::*;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use living_core::CyclePhase;
 
@@ -267,8 +267,8 @@ pub fn init_telemetry_with_config(config: TelemetryConfig) -> Result<(), Telemet
     }
 
     // Set up tracing subscriber with OpenTelemetry layer
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
 
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_target(true)
@@ -285,13 +285,13 @@ pub fn init_telemetry_with_config(config: TelemetryConfig) -> Result<(), Telemet
             .with(fmt_layer)
             .with(otel_layer)
             .try_init()
-            .map_err(|e| TelemetryError::SubscriberInit(e.to_string()))?;
+            .map_err(|e: tracing_subscriber::util::TryInitError| TelemetryError::SubscriberInit(e.to_string()))?;
     } else {
         tracing_subscriber::registry()
             .with(env_filter)
             .with(fmt_layer)
             .try_init()
-            .map_err(|e| TelemetryError::SubscriberInit(e.to_string()))?;
+            .map_err(|e: tracing_subscriber::util::TryInitError| TelemetryError::SubscriberInit(e.to_string()))?;
     }
 
     tracing::info!(

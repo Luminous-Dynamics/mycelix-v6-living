@@ -141,9 +141,7 @@ pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
         // -- Register Links --
         FlatOp::RegisterCreateLink {
             link_type,
-            base_address: _,
-            target_address: _,
-            tag: _,
+            ..
         } => match link_type {
             LinkTypes::TopicToShadows => Ok(ValidateCallbackResult::Valid),
             LinkTypes::ClaimToUncertainty => Ok(ValidateCallbackResult::Valid),

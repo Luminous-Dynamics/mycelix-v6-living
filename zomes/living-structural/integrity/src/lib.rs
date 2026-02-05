@@ -181,9 +181,7 @@ pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
         // -- Register Links --
         FlatOp::RegisterCreateLink {
             link_type,
-            base_address: _,
-            target_address: _,
-            tag: _,
+            ..
         } => match link_type {
             LinkTypes::PatternToAddress => Ok(ValidateCallbackResult::Valid),
             LinkTypes::ScaleToGovernance => Ok(ValidateCallbackResult::Valid),

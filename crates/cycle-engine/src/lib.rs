@@ -11,10 +11,30 @@
 //! Eros (4d) → Co-Creation (7d) → Beauty (2d) → Emergent Personhood (1d) →
 //! Kenosis (1d) → [back to Shadow]
 //! ```
+//!
+//! ## Telemetry (Optional)
+//!
+//! Enable the `telemetry` feature to add OpenTelemetry observability:
+//!
+//! ```toml
+//! [dependencies]
+//! cycle-engine = { path = "crates/cycle-engine", features = ["telemetry"] }
+//! ```
+//!
+//! This provides:
+//! - Distributed tracing via OTLP export
+//! - Metrics: phase_transition_count, tick_duration_ms, cycle_completion_time
+//! - Automatic span instrumentation on key scheduler methods
 
 pub mod engine;
 pub mod phase_handlers;
 pub mod scheduler;
+
+/// OpenTelemetry observability integration.
+///
+/// Only available when the `telemetry` feature is enabled.
+#[cfg(feature = "telemetry")]
+pub mod telemetry;
 
 #[cfg(test)]
 mod fuzz;

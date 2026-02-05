@@ -4,9 +4,13 @@
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::{info, error, instrument};
 
 use living_core::{LivingProtocolEvent, LivingResult, LivingProtocolConfig, InMemoryEventBus, EventBus};
 use crate::engine::MetabolismCycleEngine;
+
+#[cfg(feature = "telemetry")]
+use crate::telemetry::metrics;
 
 /// Async scheduler that drives the metabolism cycle engine.
 pub struct CycleScheduler {
@@ -17,7 +21,9 @@ pub struct CycleScheduler {
 
 impl CycleScheduler {
     /// Create a new scheduler wrapping an engine.
+    #[instrument(skip(engine), fields(tick_interval_secs = tick_interval_secs))]
     pub fn new(engine: MetabolismCycleEngine, tick_interval_secs: u64) -> Self {
+        info!("Creating new CycleScheduler");
         Self {
             engine: Arc::new(Mutex::new(engine)),
             tick_interval: std::time::Duration::from_secs(tick_interval_secs),
@@ -37,10 +43,18 @@ impl CycleScheduler {
     }
 
     /// Start the engine and run the tick loop.
+    #[instrument(skip(self), name = "cycle_scheduler_run")]
     pub async fn run(&self) -> LivingResult<()> {
+        #[cfg(feature = "telemetry")]
+        let cycle_start = std::time::Instant::now();
+
         {
             let mut engine = self.engine.lock().await;
             let start_event = engine.start()?;
+            info!(
+                cycle = start_event.cycle_number,
+                "Cycle engine started"
+            );
             if let Some(ref callback) = self.event_callback {
                 callback(vec![LivingProtocolEvent::CycleStarted(start_event)]);
             }
@@ -51,11 +65,79 @@ impl CycleScheduler {
 
             let mut engine = self.engine.lock().await;
             if !engine.is_running() {
+                info!("Cycle engine stopped, exiting scheduler loop");
                 break;
             }
 
+            // Capture state before tick for telemetry
+            let phase = engine.current_phase();
+            #[cfg(feature = "telemetry")]
+            let phase_day = engine.current_state().phase_day;
+            let cycle_number = engine.cycle_number();
+
+            #[cfg(feature = "telemetry")]
+            let tick_start = std::time::Instant::now();
+
             match engine.tick() {
                 Ok(events) => {
+                    #[cfg(feature = "telemetry")]
+                    {
+                        let tick_duration = tick_start.elapsed();
+                        if let Some(m) = metrics() {
+                            m.record_tick_duration(
+                                tick_duration.as_secs_f64() * 1000.0,
+                                phase,
+                                phase_day,
+                            );
+                        }
+                    }
+
+                    // Check for phase transitions and record metrics
+                    for event in &events {
+                        if let LivingProtocolEvent::PhaseTransitioned(transition_event) = event {
+                            let span = tracing::info_span!(
+                                "phase_transition",
+                                from_phase = ?transition_event.transition.from,
+                                to_phase = ?transition_event.transition.to,
+                                cycle = transition_event.transition.cycle_number,
+                            );
+                            let _enter = span.enter();
+                            info!(
+                                from = ?transition_event.transition.from,
+                                to = ?transition_event.transition.to,
+                                "Phase transition completed"
+                            );
+
+                            #[cfg(feature = "telemetry")]
+                            if let Some(m) = metrics() {
+                                m.record_phase_transition(
+                                    transition_event.transition.from,
+                                    transition_event.transition.to,
+                                    transition_event.transition.cycle_number,
+                                );
+                            }
+                        }
+
+                        // Track cycle completions (when we transition back to Shadow)
+                        if let LivingProtocolEvent::CycleStarted(cycle_event) = event {
+                            info!(
+                                new_cycle = cycle_event.cycle_number,
+                                "New cycle started"
+                            );
+
+                            #[cfg(feature = "telemetry")]
+                            if cycle_event.cycle_number > 1 {
+                                if let Some(m) = metrics() {
+                                    let cycle_duration = cycle_start.elapsed();
+                                    m.record_cycle_completion(
+                                        cycle_duration.as_secs_f64(),
+                                        cycle_event.cycle_number - 1,
+                                    );
+                                }
+                            }
+                        }
+                    }
+
                     if !events.is_empty() {
                         if let Some(ref callback) = self.event_callback {
                             callback(events);
@@ -63,7 +145,17 @@ impl CycleScheduler {
                     }
                 }
                 Err(e) => {
-                    tracing::error!(error = %e, "Cycle engine tick error");
+                    error!(
+                        error = %e,
+                        phase = ?phase,
+                        cycle = cycle_number,
+                        "Cycle engine tick error"
+                    );
+
+                    #[cfg(feature = "telemetry")]
+                    if let Some(m) = metrics() {
+                        m.record_tick_error(phase, &e.to_string());
+                    }
                 }
             }
         }
@@ -72,7 +164,9 @@ impl CycleScheduler {
     }
 
     /// Stop the scheduler.
+    #[instrument(skip(self), name = "cycle_scheduler_stop")]
     pub async fn stop(&self) {
+        info!("Stopping cycle scheduler");
         let mut engine = self.engine.lock().await;
         engine.stop();
     }
@@ -87,24 +181,32 @@ pub struct CycleEngineBuilder {
 }
 
 impl CycleEngineBuilder {
+    /// Create a new CycleEngineBuilder with default configuration.
+    #[instrument(name = "cycle_engine_builder_new")]
     pub fn new() -> Self {
+        info!("Creating new CycleEngineBuilder");
         Self {
             config: LivingProtocolConfig::default(),
         }
     }
 
+    /// Set a custom configuration.
     pub fn with_config(mut self, config: LivingProtocolConfig) -> Self {
         self.config = config;
         self
     }
 
+    /// Enable simulated time with the given acceleration factor.
+    #[instrument(skip(self), fields(acceleration = acceleration))]
     pub fn with_simulated_time(mut self, acceleration: f64) -> Self {
+        info!(acceleration = acceleration, "Enabling simulated time");
         self.config.cycle.simulated_time = true;
         self.config.cycle.time_acceleration = acceleration;
         self
     }
 
     /// Build the engine with all phase handlers wired to their primitive engines.
+    #[instrument(skip(self), name = "cycle_engine_build")]
     pub fn build(self) -> MetabolismCycleEngine {
         use crate::phase_handlers::*;
         use living_core::CyclePhase;
@@ -181,6 +283,7 @@ impl CycleEngineBuilder {
             )),
         );
 
+        info!("Cycle engine built with all phase handlers registered");
         engine
     }
 }

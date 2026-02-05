@@ -162,9 +162,7 @@ pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
         // -- Register Links --
         FlatOp::RegisterCreateLink {
             link_type,
-            base_address: _,
-            target_address: _,
-            tag: _,
+            ..
         } => match link_type {
             LinkTypes::AgentToWounds => Ok(ValidateCallbackResult::Valid),
             LinkTypes::AgentToComposting => Ok(ValidateCallbackResult::Valid),
@@ -173,10 +171,7 @@ pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
         },
         FlatOp::RegisterDeleteLink {
             link_type,
-            original_action: _,
-            base_address: _,
-            target_address: _,
-            tag: _,
+            ..
         } => match link_type {
             // Kenosis links are irrevocable — cannot be deleted
             LinkTypes::AgentToKenosis => Ok(ValidateCallbackResult::Invalid(

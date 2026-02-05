@@ -20,11 +20,25 @@ uuid = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 
+# Optional telemetry dependencies
+tracing-opentelemetry = { version = "0.28", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+opentelemetry = { version = "0.27", optional = true }
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"], optional = true }
+opentelemetry-otlp = { version = "0.27", features = ["tonic"], optional = true }
+
 [features]
 default = []
 tier3-experimental = ["consciousness/tier3-experimental"]
 tier4-aspirational = ["consciousness/tier4-aspirational"]
 full = ["tier3-experimental", "tier4-aspirational"]
+telemetry = [
+    "dep:tracing-opentelemetry",
+    "dep:tracing-subscriber",
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+]
 
 [dev-dependencies]
 proptest = { workspace = true }

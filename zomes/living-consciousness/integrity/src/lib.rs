@@ -154,9 +154,7 @@ pub fn validate(op: Op) -> ExternResult<ValidateCallbackResult> {
         // -- Register Links --
         FlatOp::RegisterCreateLink {
             link_type,
-            base_address: _,
-            target_address: _,
-            tag: _,
+            ..
         } => match link_type {
             LinkTypes::AgentToKVectorHistory => Ok(ValidateCallbackResult::Valid),
             LinkTypes::DreamToConfirmation => Ok(ValidateCallbackResult::Valid),

@@ -442,9 +442,9 @@ fn compute_integration_from_covariance(cov: &[[f64; 8]; 8]) -> f64 {
     let log_det = if det > 0.0 { det.ln() } else { -100.0 };
 
     // Integration = sum of individual entropies - joint entropy
-    let integration = (sum_log_var - log_det).max(0.0);
+    
 
-    integration
+    (sum_log_var - log_det).max(0.0)
 }
 
 #[cfg(test)]

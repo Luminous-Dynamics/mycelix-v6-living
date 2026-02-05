@@ -16,6 +16,8 @@ integrity:
       bundled: "../target/wasm32-unknown-unknown/release/living_relational_integrity.wasm"
     - name: living_structural_integrity
       bundled: "../target/wasm32-unknown-unknown/release/living_structural_integrity.wasm"
+    - name: bridge_integrity
+      bundled: "../target/wasm32-unknown-unknown/release/bridge_integrity.wasm"
 coordinator:
   zomes:
     - name: living_metabolism
@@ -38,3 +40,7 @@ coordinator:
       bundled: "../target/wasm32-unknown-unknown/release/living_structural.wasm"
       dependencies:
         - name: living_structural_integrity
+    - name: bridge
+      bundled: "../target/wasm32-unknown-unknown/release/bridge.wasm"
+      dependencies:
+        - name: bridge_integrity

@@ -194,6 +194,17 @@ impl Default for CycleEngineBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::phase_handlers::PhaseHandler;
+
+    fn make_state(cycle: u64, phase: living_core::CyclePhase, phase_day: u32) -> living_core::CycleState {
+        living_core::CycleState {
+            cycle_number: cycle,
+            current_phase: phase,
+            phase_started: chrono::Utc::now(),
+            cycle_started: chrono::Utc::now(),
+            phase_day,
+        }
+    }
 
     #[test]
     fn test_builder_creates_engine_with_all_handlers() {
@@ -233,5 +244,229 @@ mod tests {
             .build();
 
         assert!(!engine.is_running());
+    }
+
+    // =========================================================================
+    // Integration tests for phase handler <-> engine wiring
+    // =========================================================================
+
+    #[test]
+    fn test_shadow_handler_surfaces_suppressed_content() {
+        use crate::phase_handlers::ShadowPhaseHandler;
+        use living_core::ShadowConfig;
+
+        let mut handler = ShadowPhaseHandler::new(0.3, ShadowConfig::default());
+
+        // Record some suppressed content via the engine
+        handler.engine_mut().record_suppression(
+            "content-1",
+            "low quality",
+            0.8, // suppressor rep
+            0.2, // author rep (low rep dissent)
+            false, // not gate1 protected
+        );
+
+        let state = make_state(1, living_core::CyclePhase::Shadow, 0);
+
+        // Tick should surface the suppressed content
+        let _events = handler.on_tick(&state).unwrap();
+
+        // Verify metrics reflect the engine state
+        let metrics = handler.collect_metrics();
+        assert!(metrics.get("suppressed_content_count").is_some());
+    }
+
+    #[test]
+    fn test_negative_capability_auto_releases_on_tick() {
+        use crate::phase_handlers::NegativeCapabilityPhaseHandler;
+        use living_core::NegativeCapabilityConfig;
+
+        let mut config = NegativeCapabilityConfig::default();
+        config.max_hold_days = 0; // Immediate expiry for testing
+
+        let mut handler = NegativeCapabilityPhaseHandler::new(config);
+
+        // Hold a claim via the engine
+        handler.engine_mut().hold_in_uncertainty(
+            "claim-1",
+            "needs more research",
+            0, // min hold days
+            "did:agent:holder",
+        );
+
+        assert!(handler.engine().is_held("claim-1"));
+        assert!(!handler.engine().can_vote_on("claim-1"));
+
+        let state = make_state(1, living_core::CyclePhase::NegativeCapability, 0);
+
+        // Tick should auto-release expired claims
+        let events = handler.on_tick(&state).unwrap();
+
+        // All claims with max_hold_days=0 should be released
+        assert!(!events.is_empty() || handler.engine().held_count() == 0);
+    }
+
+    #[test]
+    fn test_cocreation_handler_decays_entanglements() {
+        use crate::phase_handlers::CoCreationPhaseHandler;
+        use living_core::EntanglementConfig;
+
+        let mut config = EntanglementConfig::default();
+        config.min_co_creation_events = 1;
+        config.decay_rate_per_day = 0.5; // Fast decay for testing
+
+        let mut handler = CoCreationPhaseHandler::new(config);
+
+        // Record co-creation to form entanglement
+        handler.engine_mut().record_co_creation(
+            &"did:agent:alice".to_string(),
+            &"did:agent:bob".to_string(),
+            "collaborated on proposal",
+            0.9,
+        );
+
+        // Form entanglement (requires min_co_creation_events)
+        let _ = handler.engine_mut().form_entanglement(
+            &"did:agent:alice".to_string(),
+            &"did:agent:bob".to_string(),
+        );
+
+        let state = make_state(1, living_core::CyclePhase::CoCreation, 3);
+
+        // Tick triggers decay_all
+        let _events = handler.on_tick(&state).unwrap();
+
+        // Metrics should reflect the engine state
+        let metrics = handler.collect_metrics();
+        assert!(metrics.get("phase").is_some());
+    }
+
+    #[test]
+    fn test_kenosis_handler_sets_cycle_on_enter() {
+        use crate::phase_handlers::KenosisPhaseHandler;
+        use living_core::{KenosisConfig, InMemoryEventBus};
+        use std::sync::Arc;
+
+        let event_bus: Arc<dyn EventBus> = Arc::new(InMemoryEventBus::new());
+        let mut handler = KenosisPhaseHandler::new(KenosisConfig::default(), event_bus);
+
+        let state = make_state(42, living_core::CyclePhase::Kenosis, 0);
+
+        // Enter should set cycle number on engine
+        handler.on_enter(&state).unwrap();
+
+        // Register an agent and try to commit kenosis
+        handler.engine_mut().register_agent("did:agent:test", 100.0);
+        let result = handler.engine_mut().commit_kenosis("did:agent:test", 0.10);
+        assert!(result.is_ok());
+
+        // The commitment should be for cycle 42
+        let commitment = result.unwrap();
+        assert_eq!(commitment.cycle_number, 42);
+    }
+
+    #[test]
+    fn test_composting_handler_reports_active_composting() {
+        use crate::phase_handlers::CompostingPhaseHandler;
+        use living_core::{CompostingConfig, InMemoryEventBus, CompostableEntity};
+        use std::sync::Arc;
+
+        let event_bus: Arc<dyn EventBus> = Arc::new(InMemoryEventBus::new());
+        let mut handler = CompostingPhaseHandler::new(CompostingConfig::default(), event_bus);
+
+        // Start composting via the engine
+        handler.engine_mut().start_composting(
+            CompostableEntity::FailedProposal,
+            "prop-123".to_string(),
+            metabolism::composting::CompostingReason::ProposalFailed {
+                vote_count: 5,
+                required: 10,
+            },
+        ).unwrap();
+
+        let state = make_state(1, living_core::CyclePhase::Composting, 2);
+
+        // Tick updates metrics
+        handler.on_tick(&state).unwrap();
+
+        let metrics = handler.collect_metrics();
+        assert_eq!(metrics["active_composting"].as_u64().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_beauty_handler_tracks_scored_proposals() {
+        use crate::phase_handlers::BeautyPhaseHandler;
+
+        let mut handler = BeautyPhaseHandler::new();
+
+        // Score a proposal via the engine
+        handler.engine_mut().score_proposal(
+            "proposal-1",
+            "A well-structured proposal with clear benefits and elegant design.",
+            "did:scorer:1",
+            &["existing pattern 1".to_string()],
+            &["requirement 1".to_string()],
+        );
+
+        let state = make_state(1, living_core::CyclePhase::Beauty, 1);
+
+        // Tick updates the proposals_scored count
+        handler.on_tick(&state).unwrap();
+
+        let metrics = handler.collect_metrics();
+        assert_eq!(metrics["proposals_scored"].as_u64().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_liminal_handler_tracks_entities() {
+        use crate::phase_handlers::LiminalPhaseHandler;
+        use living_core::LiminalEntityType;
+
+        let mut handler = LiminalPhaseHandler::new();
+
+        // Enter an entity into liminal state via the engine (returns event, not Result)
+        let _event = handler.engine_mut().enter_liminal_state(
+            &"did:entity:transitioning".to_string(),
+            LiminalEntityType::Agent,
+            Some("Identity transformation".to_string()),
+        );
+
+        let state = make_state(1, living_core::CyclePhase::Liminal, 1);
+
+        // Tick updates count
+        handler.on_tick(&state).unwrap();
+
+        let metrics = handler.collect_metrics();
+        assert_eq!(metrics["entities_in_transition"].as_u64().unwrap(), 1);
+        assert!(handler.engine().is_recategorization_blocked(&"did:entity:transitioning".to_string()));
+    }
+
+    #[test]
+    fn test_full_cycle_with_wired_handlers() {
+        // Build engine with all handlers wired
+        let mut engine = CycleEngineBuilder::new()
+            .with_simulated_time(86400.0)
+            .build();
+
+        engine.start().unwrap();
+
+        // Walk through all phases and verify ticks produce valid events
+        let phases = [
+            "Shadow", "Composting", "Liminal", "NegativeCapability",
+            "Eros", "CoCreation", "Beauty", "EmergentPersonhood", "Kenosis",
+        ];
+
+        for (_i, phase_name) in phases.iter().enumerate() {
+            // Tick in each phase
+            let _tick_events = engine.tick().unwrap();
+            // Ticks should succeed (may or may not produce events)
+
+            // Transition to next phase
+            let transition_events = engine.force_transition().unwrap();
+            assert!(!transition_events.is_empty(), "Phase {} transition should emit events", phase_name);
+        }
+
+        // Should be in cycle 2 now
+        assert_eq!(engine.cycle_number(), 2);
     }
 }

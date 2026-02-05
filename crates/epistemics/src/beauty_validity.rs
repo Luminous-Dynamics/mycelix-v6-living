@@ -115,7 +115,7 @@ impl BeautyValidityEngine {
 
         self.scored_proposals
             .entry(proposal_id.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(entry);
 
         tracing::info!(
@@ -247,7 +247,7 @@ impl BeautyValidityEngine {
 
         // Sentence-to-word ratio: moderate sentence length is economical.
         let sentence_count = content
-            .matches(|c: char| c == '.' || c == '!' || c == '?')
+            .matches(['.', '!', '?'])
             .count()
             .max(1);
         let avg_sentence_len = word_count as f64 / sentence_count as f64;

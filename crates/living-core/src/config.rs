@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Master configuration for the Living Protocol Layer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct LivingProtocolConfig {
     /// Metabolism cycle configuration
     pub cycle: CycleConfig,
@@ -31,24 +32,6 @@ pub struct LivingProtocolConfig {
     pub features: FeatureFlags,
 }
 
-impl Default for LivingProtocolConfig {
-    fn default() -> Self {
-        Self {
-            cycle: CycleConfig::default(),
-            wound_healing: WoundHealingConfig::default(),
-            kenosis: KenosisConfig::default(),
-            metabolic_trust: MetabolicTrustConfig::default(),
-            composting: CompostingConfig::default(),
-            silence: SilenceConfig::default(),
-            beauty: BeautyConfig::default(),
-            entanglement: EntanglementConfig::default(),
-            shadow: ShadowConfig::default(),
-            negative_capability: NegativeCapabilityConfig::default(),
-            dreaming: DreamingConfig::default(),
-            features: FeatureFlags::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CycleConfig {

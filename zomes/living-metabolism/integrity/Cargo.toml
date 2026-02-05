@@ -1,3 +1,5 @@
+[workspace]
+
 [package]
 name = "living_metabolism_integrity"
 version = "0.1.0"
@@ -7,9 +9,9 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-getrandom = { workspace = true }
-holochain_serialized_bytes = { workspace = true }
-hdi = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
+getrandom = { version = "0.2", features = ["js"] }
+holochain_serialized_bytes = "0.0.56"
+hdi = "0.7.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 mycelix_shared = { path = "../../shared" }

@@ -1,0 +1,189 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ============================================================================
+  # Create Release
+  # ============================================================================
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+
+  # ============================================================================
+  # Build Release Artifacts
+  # ============================================================================
+  build-artifacts:
+    name: Build Artifacts
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: mycelix-living-linux-x64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: mycelix-living-macos-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: mycelix-living-macos-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} --features full
+
+      - name: Package artifacts
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/libcycle_engine.rlib dist/ || true
+          cp target/${{ matrix.target }}/release/*.so dist/ || true
+          cp target/${{ matrix.target }}/release/*.dylib dist/ || true
+          tar -czvf ${{ matrix.artifact_name }}.tar.gz -C dist .
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.artifact_name }}.tar.gz
+          asset_name: ${{ matrix.artifact_name }}.tar.gz
+          asset_content_type: application/gzip
+
+  # ============================================================================
+  # Publish Crates
+  # ============================================================================
+  publish-crates:
+    name: Publish to crates.io
+    needs: build-artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Publish crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          # Publish in dependency order
+          cargo publish -p living-core --allow-dirty || true
+          sleep 30
+          cargo publish -p metabolism --allow-dirty || true
+          cargo publish -p consciousness --allow-dirty || true
+          cargo publish -p epistemics --allow-dirty || true
+          cargo publish -p relational --allow-dirty || true
+          cargo publish -p structural --allow-dirty || true
+          sleep 30
+          cargo publish -p cycle-engine --allow-dirty || true
+
+  # ============================================================================
+  # Publish NPM Package
+  # ============================================================================
+  publish-npm:
+    name: Publish to npm
+    needs: build-artifacts
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/typescript
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ============================================================================
+  # Build Holochain DNA
+  # ============================================================================
+  build-dna:
+    name: Build Holochain DNA
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Build DNA
+        run: |
+          nix develop --command bash -c "
+            rustup target add wasm32-unknown-unknown
+            # Build all zomes
+            for zome_dir in zomes/*/coordinator zomes/*/integrity zomes/shared; do
+              if [ -f \"\$zome_dir/Cargo.toml\" ]; then
+                cargo build --release --target wasm32-unknown-unknown --manifest-path \"\$zome_dir/Cargo.toml\"
+              fi
+            done
+            # Package DNA
+            hc dna pack dna/ -o mycelix-living-protocol.dna
+            hc app pack . -o mycelix-living-protocol.happ
+          "
+        continue-on-error: true
+
+      - name: Upload DNA artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./mycelix-living-protocol.dna
+          asset_name: mycelix-living-protocol.dna
+          asset_content_type: application/octet-stream
+        continue-on-error: true
+
+      - name: Upload hApp artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./mycelix-living-protocol.happ
+          asset_name: mycelix-living-protocol.happ
+          asset_content_type: application/octet-stream
+        continue-on-error: true

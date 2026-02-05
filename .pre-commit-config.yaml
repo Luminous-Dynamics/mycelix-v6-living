@@ -1,0 +1,69 @@
+# Pre-commit hooks for Mycelix v6.0
+# Install: pip install pre-commit && pre-commit install
+
+repos:
+  # Rust formatting and linting
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all --
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --workspace --features full -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-test
+        name: cargo test
+        entry: cargo test --workspace --features full
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [push]
+
+  # TypeScript/JavaScript
+  - repo: local
+    hooks:
+      - id: npm-build
+        name: npm build
+        entry: bash -c 'cd sdk/typescript && npm run build'
+        language: system
+        types: [ts]
+        pass_filenames: false
+
+  # Solidity
+  - repo: local
+    hooks:
+      - id: forge-fmt
+        name: forge fmt
+        entry: forge fmt --check
+        language: system
+        types: [solidity]
+        pass_filenames: false
+
+  # General
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+
+  # Markdown
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.39.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix', '--disable', 'MD013', 'MD033', 'MD041']

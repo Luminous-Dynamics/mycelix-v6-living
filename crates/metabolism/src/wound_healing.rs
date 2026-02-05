@@ -163,7 +163,7 @@ impl WoundHealingEngine {
         let record = WoundRecord {
             id: wound_id.clone(),
             agent_did: agent_did.clone(),
-            severity: severity.clone(),
+            severity: severity,
             cause: cause.clone(),
             // Hemostasis is automatic/immediate
             phase: WoundPhase::Hemostasis,

@@ -28,3 +28,9 @@ full = ["tier3-experimental", "tier4-aspirational"]
 
 [dev-dependencies]
 proptest = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "cycle_engine"
+harness = false
+path = "../../benches/cycle_engine.rs"

@@ -1,0 +1,222 @@
+groups:
+  - name: mycelix_living_protocol
+    interval: 30s
+    rules:
+      # =========================================================================
+      # Cycle Engine Metrics
+      # =========================================================================
+      - record: mycelix_cycle_number
+        expr: cycle_engine_cycle_number
+
+      - record: mycelix_current_phase
+        expr: cycle_engine_current_phase
+
+      - record: mycelix_phase_day
+        expr: cycle_engine_phase_day
+
+      # =========================================================================
+      # Wound Healing Metrics
+      # =========================================================================
+      - record: mycelix_active_wounds
+        expr: count(wound_healing_phase != 4) or vector(0)
+
+      - record: mycelix_healed_wounds
+        expr: count(wound_healing_phase == 4) or vector(0)
+
+      - alert: CriticalWoundDetected
+        expr: wound_healing_severity == 3
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Critical wound detected"
+          description: "Agent {{ $labels.agent }} has a critical wound requiring extended healing."
+
+      # =========================================================================
+      # Kenosis Metrics
+      # =========================================================================
+      - record: mycelix_total_kenosis_committed
+        expr: sum(kenosis_commitment_percentage) by (cycle)
+
+      - alert: KenosisOverCommitment
+        expr: kenosis_commitment_percentage > 0.20
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kenosis over-commitment detected"
+          description: "Agent {{ $labels.agent }} attempted to commit {{ $value }}% which exceeds 20% max."
+
+      # =========================================================================
+      # Composting Metrics
+      # =========================================================================
+      - record: mycelix_active_composting
+        expr: count(composting_progress < 1.0) or vector(0)
+
+      - record: mycelix_completed_composting
+        expr: count(composting_progress == 1.0) or vector(0)
+
+      # =========================================================================
+      # K-Vector Metrics
+      # =========================================================================
+      - record: mycelix_kvector_presence
+        expr: avg(kvector_dimension{dimension="presence"})
+
+      - record: mycelix_kvector_coherence
+        expr: avg(kvector_dimension{dimension="coherence"})
+
+      - record: mycelix_kvector_receptivity
+        expr: avg(kvector_dimension{dimension="receptivity"})
+
+      - record: mycelix_kvector_integration
+        expr: avg(kvector_dimension{dimension="integration"})
+
+      - record: mycelix_kvector_generativity
+        expr: avg(kvector_dimension{dimension="generativity"})
+
+      - record: mycelix_kvector_surrender
+        expr: avg(kvector_dimension{dimension="surrender"})
+
+      - record: mycelix_kvector_discernment
+        expr: avg(kvector_dimension{dimension="discernment"})
+
+      - record: mycelix_kvector_emergence
+        expr: avg(kvector_dimension{dimension="emergence"})
+
+      - alert: KVectorOutOfBounds
+        expr: kvector_dimension < 0 or kvector_dimension > 1
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "K-Vector dimension out of bounds"
+          description: "Agent {{ $labels.agent }} has {{ $labels.dimension }} = {{ $value }} which is outside [0, 1]."
+
+      # =========================================================================
+      # Network Phi Metrics
+      # =========================================================================
+      - record: mycelix_network_phi
+        expr: network_phi_measurement
+
+      - record: mycelix_phi_threshold
+        expr: 0.5  # Configurable threshold
+
+      - alert: LowNetworkPhi
+        expr: network_phi_measurement < 0.3
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low network integrated information"
+          description: "Network Φ is {{ $value }}, below healthy threshold."
+
+      # =========================================================================
+      # Shadow Integration Metrics
+      # =========================================================================
+      - record: mycelix_shadows_surfaced
+        expr: sum(shadow_surfaced_total)
+
+      - record: mycelix_shadows_integrated
+        expr: sum(shadow_integrated_total)
+
+      - alert: HighShadowSuppression
+        expr: rate(shadow_surfaced_total[1h]) > 10
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate of shadow content surfacing"
+          description: "{{ $value }} shadows surfaced in the last hour, indicating potential systemic suppression."
+
+      # =========================================================================
+      # Negative Capability Metrics
+      # =========================================================================
+      - record: mycelix_claims_held
+        expr: count(negative_capability_held == 1) or vector(0)
+
+      - record: mycelix_claims_released
+        expr: sum(increase(negative_capability_released_total[24h]))
+
+      # =========================================================================
+      # Entanglement Metrics
+      # =========================================================================
+      - record: mycelix_active_entanglements
+        expr: count(entanglement_strength > 0) or vector(0)
+
+      - record: mycelix_avg_entanglement_strength
+        expr: avg(entanglement_strength)
+
+      # =========================================================================
+      # Metabolic Trust Metrics
+      # =========================================================================
+      - record: mycelix_metabolic_trust
+        expr: metabolic_trust_score
+
+      - alert: LowMetabolicTrust
+        expr: metabolic_trust_score < 0.3
+        for: 24h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low metabolic trust"
+          description: "Agent {{ $labels.agent }} has trust score {{ $value }}, below healthy threshold."
+
+      # =========================================================================
+      # Gate System Metrics
+      # =========================================================================
+      - record: mycelix_gate1_violations
+        expr: sum(increase(gate1_violation_total[1h]))
+
+      - record: mycelix_gate2_warnings
+        expr: sum(increase(gate2_warning_total[1h]))
+
+      - record: mycelix_gate3_advisories
+        expr: sum(increase(gate3_advisory_total[1h]))
+
+      - alert: Gate1Violation
+        expr: increase(gate1_violation_total[5m]) > 0
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Gate 1 invariant violation"
+          description: "Hard invariant violated: {{ $labels.invariant }}"
+
+      # =========================================================================
+      # Phase-Specific Alerts
+      # =========================================================================
+      - alert: VotingInNegativeCapabilityPhase
+        expr: cycle_engine_current_phase == 3 and voting_attempted == 1
+        for: 0s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Voting attempted during Negative Capability phase"
+          description: "Voting should be blocked during Negative Capability phase."
+
+      - alert: KenosisOutsideKenosisPhase
+        expr: cycle_engine_current_phase != 8 and kenosis_attempted == 1
+        for: 0s
+        labels:
+          severity: error
+        annotations:
+          summary: "Kenosis attempted outside Kenosis phase"
+          description: "Kenosis can only be committed during the Kenosis phase."
+
+      # =========================================================================
+      # Bridge Metrics
+      # =========================================================================
+      - record: mycelix_bridge_calls
+        expr: sum(increase(bridge_call_total[1h])) by (function)
+
+      - record: mycelix_bridge_errors
+        expr: sum(increase(bridge_call_error_total[1h])) by (function)
+
+      - alert: BridgeCallFailures
+        expr: rate(bridge_call_error_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High bridge call failure rate"
+          description: "Bridge function {{ $labels.function }} has {{ $value }} errors per second."

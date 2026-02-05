@@ -132,7 +132,7 @@ impl SilenceSignalEngine {
         let proofs = self
             .presence_registry
             .entry(agent_did.to_string())
-            .or_insert_with(Vec::new);
+            .or_default();
 
         proofs.push(proof);
 

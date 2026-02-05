@@ -16,6 +16,9 @@ pub mod engine;
 pub mod phase_handlers;
 pub mod scheduler;
 
+#[cfg(test)]
+mod fuzz;
+
 pub use engine::*;
 pub use phase_handlers::*;
 pub use scheduler::*;

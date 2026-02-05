@@ -169,7 +169,7 @@ impl MetabolicTrustEngine {
 
         // Gate 1: verify bounded [0.0, 1.0]
         debug_assert!(
-            metabolic_trust >= 0.0 && metabolic_trust <= 1.0,
+            (0.0..=1.0).contains(&metabolic_trust),
             "Metabolic trust score {} out of bounds [0.0, 1.0]",
             metabolic_trust
         );

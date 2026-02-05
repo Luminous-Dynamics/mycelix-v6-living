@@ -295,17 +295,14 @@ impl LivingPrimitive for EntanglementEngine {
     ) -> LivingResult<Vec<LivingProtocolEvent>> {
         let mut events = Vec::new();
 
-        match new_phase {
-            CyclePhase::CoCreation => {
-                // During co-creation phase, apply decay to surface neglected
-                // entanglements and remove dead ones.
-                let now = Utc::now();
-                let decayed = self.decay_all(now);
-                for d in decayed {
-                    events.push(LivingProtocolEvent::EntanglementDecayed(d));
-                }
+        if new_phase == CyclePhase::CoCreation {
+            // During co-creation phase, apply decay to surface neglected
+            // entanglements and remove dead ones.
+            let now = Utc::now();
+            let decayed = self.decay_all(now);
+            for d in decayed {
+                events.push(LivingProtocolEvent::EntanglementDecayed(d));
             }
-            _ => {}
         }
 
         Ok(events)

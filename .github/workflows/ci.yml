@@ -1,0 +1,207 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ============================================================================
+  # Rust Tests
+  # ============================================================================
+  rust-test:
+    name: Rust Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features: ["", "tier3-experimental", "tier4-aspirational", "full"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace --features "${{ matrix.features }}" -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace --features "${{ matrix.features }}"
+
+  # ============================================================================
+  # Rust Build
+  # ============================================================================
+  rust-build:
+    name: Rust Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release
+        run: cargo build --release --workspace --features full
+
+  # ============================================================================
+  # TypeScript SDK
+  # ============================================================================
+  typescript:
+    name: TypeScript SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/typescript
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sdk/typescript/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+        continue-on-error: true  # Tests may not exist yet
+
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true  # Lint config may not exist yet
+
+  # ============================================================================
+  # Solidity Contracts
+  # ============================================================================
+  solidity:
+    name: Solidity Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Install dependencies
+        run: forge install
+
+      - name: Run tests
+        run: forge test -vvv
+
+      - name: Check gas snapshots
+        run: forge snapshot --check
+        continue-on-error: true  # Snapshot may not exist yet
+
+      - name: Run coverage
+        run: forge coverage --report summary
+        continue-on-error: true
+
+  # ============================================================================
+  # Holochain Zomes (WASM)
+  # ============================================================================
+  holochain-zomes:
+    name: Holochain Zomes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Setup Holochain cache
+        uses: cachix/cachix-action@v14
+        with:
+          name: holochain-ci
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        continue-on-error: true
+
+      - name: Build zomes
+        run: |
+          nix develop --command bash -c "
+            rustup target add wasm32-unknown-unknown
+            for zome_dir in zomes/*/coordinator zomes/*/integrity zomes/shared; do
+              if [ -f \"\$zome_dir/Cargo.toml\" ]; then
+                echo \"Building \$zome_dir\"
+                cargo build --release --target wasm32-unknown-unknown --manifest-path \"\$zome_dir/Cargo.toml\"
+              fi
+            done
+          "
+        continue-on-error: true  # May fail without holonix
+
+  # ============================================================================
+  # Security Audit
+  # ============================================================================
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run audit
+        run: cargo audit
+        continue-on-error: true  # Advisory-only
+
+  # ============================================================================
+  # Documentation
+  # ============================================================================
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Build documentation
+        run: cargo doc --workspace --no-deps --features full
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: target/doc

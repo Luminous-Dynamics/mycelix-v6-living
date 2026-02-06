@@ -22,6 +22,7 @@
 //! ```
 
 use std::any::Any;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -416,8 +417,8 @@ pub struct PluginManager {
     plugins: HashMap<String, PluginEntry>,
     /// Order counter for maintaining load order
     load_counter: usize,
-    /// Shared context for all plugins
-    context: PluginContext,
+    /// Shared context for all plugins (RefCell for interior mutability)
+    context: RefCell<PluginContext>,
     /// Whether the manager is initialized
     initialized: bool,
 }
@@ -428,7 +429,7 @@ impl PluginManager {
         Self {
             plugins: HashMap::new(),
             load_counter: 0,
-            context: PluginContext::new(
+            context: RefCell::new(PluginContext::new(
                 CycleState {
                     cycle_number: 0,
                     current_phase: CyclePhase::Shadow,
@@ -446,7 +447,7 @@ impl PluginManager {
                     entangled_pairs: 0,
                     held_uncertainties: 0,
                 },
-            ),
+            )),
             initialized: false,
         }
     }
@@ -475,7 +476,7 @@ impl PluginManager {
         plugin.configure(config.clone())?;
 
         // Call on_load hook
-        plugin.on_load(&mut self.context)?;
+        plugin.on_load(&mut *self.context.borrow_mut())?;
 
         let load_order = self.load_counter;
         self.load_counter += 1;
@@ -507,7 +508,7 @@ impl PluginManager {
             .remove(name)
             .ok_or_else(|| PluginError::NotFound(name.to_string()))?;
 
-        entry.plugin.on_unload(&mut self.context)?;
+        entry.plugin.on_unload(&mut *self.context.borrow_mut())?;
 
         info!(plugin = %name, "Plugin unloaded");
 
@@ -551,8 +552,8 @@ impl PluginManager {
 
     /// Update the context with new engine state.
     pub fn update_context(&mut self, state: CycleState, metrics: PhaseMetrics) {
-        self.context.update_cycle_state(state);
-        self.context.update_phase_metrics(metrics);
+        self.context.borrow_mut().update_cycle_state(state);
+        self.context.borrow_mut().update_phase_metrics(metrics);
     }
 
     /// Get plugins sorted by priority for hook execution.
@@ -577,15 +578,12 @@ impl PluginManager {
 
         for name in plugin_order {
             if let Some(entry) = self.plugins.get(&name) {
-                entry.plugin.on_phase_enter(phase, &mut self.context);
-
-                // Collect emitted events
-                all_events.extend(self.context.take_emitted_events());
-
-                // Process log messages
-                for msg in self.context.take_log_messages() {
-                    self.dispatch_log_message(&name, msg);
-                }
+                entry.plugin.on_phase_enter(phase, &mut *self.context.borrow_mut());
+            }
+            // Collect emitted events and logs after releasing the plugins borrow
+            all_events.extend(self.context.borrow_mut().take_emitted_events());
+            for msg in self.context.borrow_mut().take_log_messages() {
+                self.dispatch_log_message(&name, msg);
             }
         }
 
@@ -599,12 +597,11 @@ impl PluginManager {
 
         for name in plugin_order {
             if let Some(entry) = self.plugins.get(&name) {
-                entry.plugin.on_phase_exit(phase, &mut self.context);
-                all_events.extend(self.context.take_emitted_events());
-
-                for msg in self.context.take_log_messages() {
-                    self.dispatch_log_message(&name, msg);
-                }
+                entry.plugin.on_phase_exit(phase, &mut *self.context.borrow_mut());
+            }
+            all_events.extend(self.context.borrow_mut().take_emitted_events());
+            for msg in self.context.borrow_mut().take_log_messages() {
+                self.dispatch_log_message(&name, msg);
             }
         }
 
@@ -618,12 +615,11 @@ impl PluginManager {
 
         for name in plugin_order {
             if let Some(entry) = self.plugins.get(&name) {
-                entry.plugin.on_tick(&mut self.context);
-                all_events.extend(self.context.take_emitted_events());
-
-                for msg in self.context.take_log_messages() {
-                    self.dispatch_log_message(&name, msg);
-                }
+                entry.plugin.on_tick(&mut *self.context.borrow_mut());
+            }
+            all_events.extend(self.context.borrow_mut().take_emitted_events());
+            for msg in self.context.borrow_mut().take_log_messages() {
+                self.dispatch_log_message(&name, msg);
             }
         }
 
@@ -636,11 +632,10 @@ impl PluginManager {
 
         for name in plugin_order {
             if let Some(entry) = self.plugins.get(&name) {
-                entry.plugin.on_event(event, &mut self.context);
-
-                for msg in self.context.take_log_messages() {
-                    self.dispatch_log_message(&name, msg);
-                }
+                entry.plugin.on_event(event, &mut *self.context.borrow_mut());
+            }
+            for msg in self.context.borrow_mut().take_log_messages() {
+                self.dispatch_log_message(&name, msg);
             }
         }
     }
@@ -656,14 +651,11 @@ impl PluginManager {
 
         for name in plugin_order {
             if let Some(entry) = self.plugins.get(&name) {
-                entry
-                    .plugin
-                    .on_phase_transition(from, to, &mut self.context);
-                all_events.extend(self.context.take_emitted_events());
-
-                for msg in self.context.take_log_messages() {
-                    self.dispatch_log_message(&name, msg);
-                }
+                entry.plugin.on_phase_transition(from, to, &mut *self.context.borrow_mut());
+            }
+            all_events.extend(self.context.borrow_mut().take_emitted_events());
+            for msg in self.context.borrow_mut().take_log_messages() {
+                self.dispatch_log_message(&name, msg);
             }
         }
 
@@ -677,12 +669,11 @@ impl PluginManager {
 
         for name in plugin_order {
             if let Some(entry) = self.plugins.get(&name) {
-                entry.plugin.on_cycle_start(cycle_number, &mut self.context);
-                all_events.extend(self.context.take_emitted_events());
-
-                for msg in self.context.take_log_messages() {
-                    self.dispatch_log_message(&name, msg);
-                }
+                entry.plugin.on_cycle_start(cycle_number, &mut *self.context.borrow_mut());
+            }
+            all_events.extend(self.context.borrow_mut().take_emitted_events());
+            for msg in self.context.borrow_mut().take_log_messages() {
+                self.dispatch_log_message(&name, msg);
             }
         }
 
@@ -696,14 +687,11 @@ impl PluginManager {
 
         for name in plugin_order {
             if let Some(entry) = self.plugins.get(&name) {
-                entry
-                    .plugin
-                    .on_cycle_complete(cycle_number, &mut self.context);
-                all_events.extend(self.context.take_emitted_events());
-
-                for msg in self.context.take_log_messages() {
-                    self.dispatch_log_message(&name, msg);
-                }
+                entry.plugin.on_cycle_complete(cycle_number, &mut *self.context.borrow_mut());
+            }
+            all_events.extend(self.context.borrow_mut().take_emitted_events());
+            for msg in self.context.borrow_mut().take_log_messages() {
+                self.dispatch_log_message(&name, msg);
             }
         }
 
@@ -712,7 +700,7 @@ impl PluginManager {
 
     /// Check if any plugin requested a pause.
     pub fn is_pause_requested(&self) -> bool {
-        self.context.is_pause_requested()
+        self.context.borrow().is_pause_requested()
     }
 
     /// Process a log message from a plugin.

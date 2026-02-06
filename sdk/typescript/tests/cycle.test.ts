@@ -79,12 +79,12 @@ describe('Cycle Calculations', () => {
   });
 
   it('should calculate days remaining in phase', () => {
-    const currentPhaseDay = 2;
+    const currentPhaseDay = 1;
     const currentPhase = CyclePhase.Shadow;
-    const phaseDuration = PHASE_DURATIONS[currentPhase];
+    const phaseDuration = PHASE_DURATIONS[currentPhase]; // Shadow = 2 days
 
     const daysRemaining = phaseDuration - currentPhaseDay;
-    expect(daysRemaining).toBe(1);
+    expect(daysRemaining).toBe(1); // 2 - 1 = 1
   });
 
   it('should calculate total days elapsed', () => {
@@ -98,7 +98,7 @@ describe('Cycle Calculations', () => {
     });
     totalDays += dayInCurrentPhase;
 
-    expect(totalDays).toBe(5); // 3 (Shadow) + 2 (Composting)
+    expect(totalDays).toBe(4); // 2 (Shadow) + 2 (Composting day 2)
   });
 });
 

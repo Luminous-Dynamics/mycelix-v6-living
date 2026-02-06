@@ -3,7 +3,10 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use std::sync::Arc;
 
-use living_core::{InMemoryEventBus, LivingProtocolConfig, EventBus};
+use living_core::{
+    InMemoryEventBus, EventBus, WoundSeverity, KenosisConfig,
+    WoundHealingConfig, EpistemicClassification, EpistemicTier, NormativeTier, MaterialityTier,
+};
 use cycle_engine::scheduler::CycleEngineBuilder;
 
 /// Benchmark engine creation.
@@ -120,19 +123,19 @@ fn bench_multiple_cycles(c: &mut Criterion) {
 
 /// Benchmark wound healing operations.
 fn bench_wound_healing(c: &mut Criterion) {
-    use metabolism::wound_healing::{WoundHealingService, WoundSeverity};
+    use metabolism::wound_healing::WoundHealingEngine;
 
     let event_bus: Arc<dyn EventBus> = Arc::new(InMemoryEventBus::new());
+    let config = WoundHealingConfig::default();
 
     c.bench_function("wound_create", |b| {
         b.iter_batched(
-            || WoundHealingService::new(event_bus.clone()),
-            |mut service| {
-                black_box(service.create_wound(
-                    "did:agent:bench",
+            || WoundHealingEngine::new(config.clone(), event_bus.clone()),
+            |mut engine: WoundHealingEngine| {
+                black_box(engine.create_wound(
+                    "did:agent:bench".to_string(),
                     WoundSeverity::Moderate,
-                    "benchmark test",
-                    Some(1000.0),
+                    "benchmark test".to_string(),
                 ).unwrap())
             },
             criterion::BatchSize::SmallInput,
@@ -142,17 +145,16 @@ fn bench_wound_healing(c: &mut Criterion) {
     c.bench_function("wound_advance_phase", |b| {
         b.iter_batched(
             || {
-                let mut service = WoundHealingService::new(event_bus.clone());
-                let id = service.create_wound(
-                    "did:agent:bench",
+                let mut engine = WoundHealingEngine::new(config.clone(), event_bus.clone());
+                let record = engine.create_wound(
+                    "did:agent:bench".to_string(),
                     WoundSeverity::Moderate,
-                    "benchmark test",
-                    Some(1000.0),
+                    "benchmark test".to_string(),
                 ).unwrap();
-                (service, id)
+                (engine, record.id)
             },
-            |(mut service, id)| {
-                black_box(service.advance_phase(&id, "did:witness:bench").unwrap())
+            |(mut engine, id): (WoundHealingEngine, String)| {
+                black_box(engine.advance_phase(&id).unwrap())
             },
             criterion::BatchSize::SmallInput,
         )
@@ -181,19 +183,28 @@ fn bench_composting(c: &mut Criterion) {
         )
     });
 
-    c.bench_function("composting_tick", |b| {
+    c.bench_function("composting_extract_nutrient", |b| {
         b.iter_batched(
             || {
                 let mut engine = CompostingEngine::new(config.clone(), event_bus.clone());
-                engine.start_composting(
+                let record = engine.start_composting(
                     CompostableEntity::FailedProposal,
                     "proposal-bench".to_string(),
                     CompostingReason::ProposalFailed { vote_count: 5, required: 10 },
                 ).unwrap();
-                engine
+                (engine, record.id)
             },
-            |mut engine| {
-                black_box(engine.tick_all())
+            |(mut engine, record_id)| {
+                let classification = EpistemicClassification {
+                    e: EpistemicTier::Testimonial,
+                    n: NormativeTier::NetworkConsensus,
+                    m: MaterialityTier::Persistent,
+                };
+                black_box(engine.extract_nutrient(
+                    &record_id,
+                    "learned-something".to_string(),
+                    classification,
+                ).unwrap())
             },
             criterion::BatchSize::SmallInput,
         )
@@ -202,7 +213,7 @@ fn bench_composting(c: &mut Criterion) {
 
 /// Benchmark kenosis operations.
 fn bench_kenosis(c: &mut Criterion) {
-    use metabolism::kenosis::{KenosisEngine, KenosisConfig};
+    use metabolism::kenosis::KenosisEngine;
 
     let event_bus: Arc<dyn EventBus> = Arc::new(InMemoryEventBus::new());
     let config = KenosisConfig::default();
@@ -227,6 +238,7 @@ fn bench_kenosis(c: &mut Criterion) {
 fn bench_entanglement(c: &mut Criterion) {
     use relational::entangled_pairs::EntanglementEngine;
     use living_core::EntanglementConfig;
+    use chrono::Utc;
 
     let mut config = EntanglementConfig::default();
     config.min_co_creation_events = 1;
@@ -281,7 +293,7 @@ fn bench_entanglement(c: &mut Criterion) {
                 engine
             },
             |mut engine| {
-                black_box(engine.decay_all())
+                black_box(engine.decay_all(Utc::now()))
             },
             criterion::BatchSize::SmallInput,
         )
@@ -312,13 +324,10 @@ fn bench_beauty_scoring(c: &mut Criterion) {
 /// Benchmark negative capability operations.
 fn bench_negative_capability(c: &mut Criterion) {
     use epistemics::negative_capability::NegativeCapabilityEngine;
-    use living_core::NegativeCapabilityConfig;
-
-    let config = NegativeCapabilityConfig::default();
 
     c.bench_function("negative_capability_hold", |b| {
         b.iter_batched(
-            || NegativeCapabilityEngine::new(config.clone()),
+            || NegativeCapabilityEngine::new(),
             |mut engine| {
                 black_box(engine.hold_in_uncertainty(
                     "claim-bench",
@@ -331,12 +340,10 @@ fn bench_negative_capability(c: &mut Criterion) {
         )
     });
 
-    c.bench_function("negative_capability_check_releases", |b| {
+    c.bench_function("negative_capability_auto_release", |b| {
         b.iter_batched(
             || {
-                let mut config = NegativeCapabilityConfig::default();
-                config.max_hold_days = 0; // Immediate expiry
-                let mut engine = NegativeCapabilityEngine::new(config);
+                let mut engine = NegativeCapabilityEngine::new();
                 for i in 0..100 {
                     engine.hold_in_uncertainty(
                         &format!("claim-{}", i),
@@ -348,7 +355,8 @@ fn bench_negative_capability(c: &mut Criterion) {
                 engine
             },
             |mut engine| {
-                black_box(engine.check_auto_releases())
+                // max_hold_days = 0 means immediate expiry
+                black_box(engine.auto_release_expired(0))
             },
             criterion::BatchSize::SmallInput,
         )

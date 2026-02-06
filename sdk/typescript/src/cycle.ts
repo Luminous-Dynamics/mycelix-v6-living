@@ -3,14 +3,23 @@
  * Orchestrator for the 28-day lunar metabolism cycle.
  */
 
-import type {
+import {
   CyclePhase,
-  CycleState,
-  PhaseTransition,
-  PhaseMetrics,
   PHASE_ORDER,
   PHASE_DURATIONS,
 } from './types';
+
+import type {
+  CycleState,
+  PhaseTransition,
+  PhaseMetrics,
+} from './types';
+
+// Re-export cycle types for convenience
+export { CyclePhase, PHASE_ORDER, PHASE_DURATIONS };
+
+// Also export total cycle days constant
+export const TOTAL_CYCLE_DAYS = 28;
 
 // =============================================================================
 // Cycle Event Types

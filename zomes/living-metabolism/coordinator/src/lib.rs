@@ -215,7 +215,11 @@ pub fn update_metabolic_trust(input: TrustInput) -> ExternResult<Record> {
 #[hdk_extern]
 pub fn get_wounds_for_agent(agent: AgentPubKey) -> ExternResult<Vec<Record>> {
     let links = get_links(
-        GetLinksInputBuilder::try_new(agent, LinkTypes::AgentToWounds)?.build(),
+        LinkQuery::new(agent, LinkTypeFilter::single_type(
+            zome_info()?.id,
+            LinkType(LinkTypes::AgentToWounds as u8),
+        )),
+        GetStrategy::Local,
     )?;
 
     let mut records: Vec<Record> = Vec::new();

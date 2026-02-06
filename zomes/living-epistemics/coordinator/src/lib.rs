@@ -69,13 +69,12 @@ pub fn surface_shadow(input: ShadowInput) -> ExternResult<Record> {
 
     let action_hash = create_entry(EntryTypes::ShadowRecord(shadow))?;
 
-    // Link from the topic hash to the shadow for retrieval
-    let topic_hash = hash_entry(input.topic)?;
+    // Link from the agent to the shadow for retrieval (using agent as anchor)
     create_link(
-        topic_hash,
+        agent.clone(),
         action_hash.clone(),
         LinkTypes::TopicToShadows,
-        (),
+        input.topic.as_bytes().to_vec(),  // Store topic in link tag
     )?;
 
     let record = get(action_hash, GetOptions::default())?
@@ -244,7 +243,11 @@ pub fn submit_beauty_score(input: BeautyInput) -> ExternResult<Record> {
 #[hdk_extern]
 pub fn get_beauty_scores(proposal_hash: ActionHash) -> ExternResult<Vec<Record>> {
     let links = get_links(
-        GetLinksInputBuilder::try_new(proposal_hash, LinkTypes::ProposalToBeautyScores)?.build(),
+        LinkQuery::new(proposal_hash, LinkTypeFilter::single_type(
+            zome_info()?.id,
+            LinkType(LinkTypes::ProposalToBeautyScores as u8),
+        )),
+        GetStrategy::Local,
     )?;
 
     let mut records: Vec<Record> = Vec::new();

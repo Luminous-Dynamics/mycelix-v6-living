@@ -79,13 +79,13 @@ pub fn create_resonance_address(input: AddressInput) -> ExternResult<Record> {
 
     let action_hash = create_entry(EntryTypes::ResonanceAddressRecord(address))?;
 
-    // Link a pattern anchor to the address for later retrieval
-    let pattern_anchor = hash_entry("resonance_addresses".to_string())?;
+    // Link from agent to address for later retrieval
+    let agent = agent_info()?.agent_initial_pubkey;
     create_link(
-        pattern_anchor,
+        agent,
         action_hash.clone(),
         LinkTypes::PatternToAddress,
-        (),
+        "resonance_address".as_bytes().to_vec(),
     )?;
 
     let record = get(action_hash, GetOptions::default())?
@@ -100,9 +100,13 @@ pub fn create_resonance_address(input: AddressInput) -> ExternResult<Record> {
 /// whose cosine similarity to the query pattern exceeds the threshold.
 #[hdk_extern]
 pub fn resolve_by_pattern(query: PatternQuery) -> ExternResult<Vec<Record>> {
-    let pattern_anchor = hash_entry("resonance_addresses".to_string())?;
+    let agent = agent_info()?.agent_initial_pubkey;
     let links = get_links(
-        GetLinksInputBuilder::try_new(pattern_anchor, LinkTypes::PatternToAddress)?.build(),
+        LinkQuery::new(agent, LinkTypeFilter::single_type(
+            zome_info()?.id,
+            LinkType(LinkTypes::PatternToAddress as u8),
+        )),
+        GetStrategy::Local,
     )?;
 
     let mut results: Vec<Record> = Vec::new();
@@ -141,7 +145,7 @@ pub fn create_fractal_pattern(input: FractalInput) -> ExternResult<Record> {
     let now = sys_time()?;
 
     let governance = FractalGovernanceRecord {
-        creator: agent,
+        creator: agent.clone(),
         pattern_name: input.pattern_name,
         scale: input.scale.clone(),
         parent_pattern_hash: input.parent_pattern_hash,
@@ -153,13 +157,12 @@ pub fn create_fractal_pattern(input: FractalInput) -> ExternResult<Record> {
 
     let action_hash = create_entry(EntryTypes::FractalGovernanceRecord(governance))?;
 
-    // Link from scale to governance for scale-based retrieval
-    let scale_hash = hash_entry(input.scale)?;
+    // Link from action to governance for retrieval, store scale in tag
     create_link(
-        scale_hash,
+        agent.clone(),
         action_hash.clone(),
         LinkTypes::ScaleToGovernance,
-        (),
+        input.scale.as_bytes().to_vec(),
     )?;
 
     let record = get(action_hash, GetOptions::default())?
@@ -194,7 +197,7 @@ pub fn replicate_pattern(input: ReplicateInput) -> ExternResult<Record> {
 
     // Create child with inherited structural rules
     let child = FractalGovernanceRecord {
-        creator: agent,
+        creator: agent.clone(),
         pattern_name: parent.pattern_name.clone(),
         scale: input.child_scale.clone(),
         parent_pattern_hash: Some(input.parent_hash),
@@ -206,12 +209,11 @@ pub fn replicate_pattern(input: ReplicateInput) -> ExternResult<Record> {
 
     let action_hash = create_entry(EntryTypes::FractalGovernanceRecord(child))?;
 
-    let scale_hash = hash_entry(input.child_scale)?;
     create_link(
-        scale_hash,
+        agent.clone(),
         action_hash.clone(),
         LinkTypes::ScaleToGovernance,
-        (),
+        input.child_scale.as_bytes().to_vec(),
     )?;
 
     let record = get(action_hash, GetOptions::default())?

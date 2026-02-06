@@ -210,14 +210,13 @@ pub fn register_inter_species(input: InterSpeciesInput) -> ExternResult<Record> 
 
     let action_hash = create_entry(EntryTypes::InterSpeciesRecord(inter_species))?;
 
-    // Link species identifier to participants
-    let species_hash = hash_entry(input.species_type)?;
+    // Link from action hash to participants with species type in tag
     for participant in &input.participants {
         create_link(
-            species_hash.clone(),
+            action_hash.clone(),
             participant.clone(),
             LinkTypes::SpeciesToParticipants,
-            (),
+            input.species_type.as_bytes().to_vec(),  // Store species in link tag
         )?;
     }
 

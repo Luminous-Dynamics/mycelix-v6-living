@@ -5,6 +5,8 @@
 //! - Structured JSON logging
 //! - Trace context propagation helpers
 
+#[cfg(feature = "otlp")]
+use opentelemetry::trace::TracerProvider as TracerProviderTrait;
 use opentelemetry_sdk::trace::TracerProvider;
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
@@ -58,6 +60,7 @@ pub fn init_telemetry(config: &TelemetryConfig) -> anyhow::Result<Option<TracerP
         let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
         // Build the logging layer and combine with OTLP
+        // Use boxed layers to erase types and allow combining different format layers
         if config.json_logs {
             let json_layer = fmt::layer()
                 .json()
@@ -66,9 +69,10 @@ pub fn init_telemetry(config: &TelemetryConfig) -> anyhow::Result<Option<TracerP
                 .with_target(true)
                 .with_file(true)
                 .with_line_number(true)
-                .with_filter(env_filter);
+                .boxed();
 
             tracing_subscriber::registry()
+                .with(env_filter)
                 .with(json_layer)
                 .with(otel_layer)
                 .try_init()
@@ -80,9 +84,10 @@ pub fn init_telemetry(config: &TelemetryConfig) -> anyhow::Result<Option<TracerP
                 .with_file(false)
                 .with_line_number(false)
                 .compact()
-                .with_filter(env_filter);
+                .boxed();
 
             tracing_subscriber::registry()
+                .with(env_filter)
                 .with(fmt_layer)
                 .with(otel_layer)
                 .try_init()
@@ -146,7 +151,7 @@ fn init_otlp_tracer(
 ) -> anyhow::Result<TracerProvider> {
     use opentelemetry::KeyValue;
     use opentelemetry_otlp::WithExportConfig;
-    use opentelemetry_sdk::{runtime, trace::Config, Resource};
+    use opentelemetry_sdk::{runtime, Resource};
 
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
@@ -156,12 +161,10 @@ fn init_otlp_tracer(
 
     let provider = TracerProvider::builder()
         .with_batch_exporter(exporter, runtime::Tokio)
-        .with_config(
-            Config::default().with_resource(Resource::new(vec![
-                KeyValue::new("service.name", service_name.to_string()),
-                KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-            ])),
-        )
+        .with_resource(Resource::new(vec![
+            KeyValue::new("service.name", service_name.to_string()),
+            KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+        ]))
         .build();
 
     Ok(provider)

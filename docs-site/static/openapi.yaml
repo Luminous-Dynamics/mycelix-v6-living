@@ -1,0 +1,772 @@
+openapi: 3.1.0
+info:
+  title: Mycelix REST API
+  description: |
+    REST API for Mycelix - A Living System for Distributed Intelligence.
+
+    The Mycelix API provides access to cycle information, primitives, storage, and cluster management.
+    All endpoints are phase-aware and may behave differently based on the current cycle phase.
+
+    ## Authentication
+
+    All API requests require authentication via API Key or JWT:
+
+    ```
+    X-API-Key: mk_prod_xxx
+    ```
+
+    or
+
+    ```
+    Authorization: Bearer <jwt-token>
+    ```
+
+    ## Rate Limiting
+
+    Rate limits vary by phase:
+    - Dawn: 500/min
+    - Surge: 1000/min
+    - Settle: 700/min
+    - Rest: 200/min
+
+  version: 1.0.0
+  contact:
+    name: Mycelix Team
+    url: https://mycelix.io
+    email: support@mycelix.io
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.mycelix.io/v1
+    description: Production server
+  - url: https://staging-api.mycelix.io/v1
+    description: Staging server
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+tags:
+  - name: Cycle
+    description: Cycle and phase operations
+  - name: Primitives
+    description: Primitive management
+  - name: Storage
+    description: Key-value storage operations
+  - name: Cluster
+    description: Cluster management
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /cycle:
+    get:
+      tags: [Cycle]
+      summary: Get current cycle status
+      operationId: getCycleStatus
+      responses:
+        '200':
+          description: Current cycle status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleResponse'
+
+  /cycle/history:
+    get:
+      tags: [Cycle]
+      summary: Get cycle history
+      operationId: getCycleHistory
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Cycle history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CycleHistoryResponse'
+
+  /primitives:
+    get:
+      tags: [Primitives]
+      summary: List all primitives
+      operationId: listPrimitives
+      parameters:
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/PrimitiveType'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/PrimitiveStatus'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of primitives
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrimitiveListResponse'
+
+    post:
+      tags: [Primitives]
+      summary: Create a new primitive
+      operationId: createPrimitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePrimitiveRequest'
+      responses:
+        '201':
+          description: Primitive created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrimitiveResponse'
+
+  /primitives/{id}:
+    get:
+      tags: [Primitives]
+      summary: Get primitive by ID
+      operationId: getPrimitive
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Primitive details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrimitiveResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Primitives]
+      summary: Update primitive
+      operationId: updatePrimitive
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePrimitiveRequest'
+      responses:
+        '200':
+          description: Primitive updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrimitiveResponse'
+
+    delete:
+      tags: [Primitives]
+      summary: Delete primitive
+      operationId: deletePrimitive
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Primitive deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+
+  /primitives/{id}/invoke:
+    post:
+      tags: [Primitives]
+      summary: Invoke primitive
+      operationId: invokePrimitive
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvokeRequest'
+      responses:
+        '200':
+          description: Invocation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvokeResponse'
+
+  /store/{key}:
+    get:
+      tags: [Storage]
+      summary: Get value by key
+      operationId: getValue
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: store
+          in: query
+          schema:
+            $ref: '#/components/schemas/StoreType'
+      responses:
+        '200':
+          description: Value retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreEntryResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Storage]
+      summary: Set value by key
+      operationId: setValue
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: store
+          in: query
+          schema:
+            $ref: '#/components/schemas/StoreType'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetValueRequest'
+      responses:
+        '200':
+          description: Value set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreEntryResponse'
+
+    delete:
+      tags: [Storage]
+      summary: Delete value by key
+      operationId: deleteValue
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: store
+          in: query
+          schema:
+            $ref: '#/components/schemas/StoreType'
+      responses:
+        '200':
+          description: Value deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+
+  /cluster:
+    get:
+      tags: [Cluster]
+      summary: Get cluster status
+      operationId: getClusterStatus
+      responses:
+        '200':
+          description: Cluster status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterResponse'
+
+  /cluster/nodes/{id}:
+    get:
+      tags: [Cluster]
+      summary: Get node details
+      operationId: getNode
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Node details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeResponse'
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Basic health check
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness check
+      operationId: readinessCheck
+      security: []
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      operationId: livenessCheck
+      security: []
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Phase:
+      type: string
+      enum: [Dawn, Surge, Settle, Rest]
+
+    PrimitiveType:
+      type: string
+      enum:
+        - pulse
+        - signal
+        - echo
+        - thread
+        - weave
+        - mesh
+        - spore
+        - bloom
+        - fruit
+        - root
+        - mycelium
+        - archive
+        - stream
+        - pool
+        - gate
+        - sense
+        - dream
+        - wake
+        - cycle
+        - phase
+        - rhythm
+
+    PrimitiveStatus:
+      type: string
+      enum: [active, paused, error, initializing]
+
+    StoreType:
+      type: string
+      enum: [root, mycelium, archive]
+      default: root
+
+    CycleResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            phase:
+              $ref: '#/components/schemas/Phase'
+            day:
+              type: integer
+              minimum: 1
+              maximum: 28
+            cycleNumber:
+              type: integer
+            progress:
+              type: number
+              minimum: 0
+              maximum: 1
+            nextPhase:
+              $ref: '#/components/schemas/Phase'
+            daysUntilNextPhase:
+              type: integer
+
+    CycleHistoryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            cycles:
+              type: array
+              items:
+                type: object
+                properties:
+                  number:
+                    type: integer
+                  startDate:
+                    type: string
+                    format: date
+                  endDate:
+                    type: string
+                    format: date
+                    nullable: true
+                  status:
+                    type: string
+                    enum: [active, completed]
+            total:
+              type: integer
+
+    PrimitiveListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            primitives:
+              type: array
+              items:
+                $ref: '#/components/schemas/Primitive'
+            total:
+              type: integer
+            limit:
+              type: integer
+            offset:
+              type: integer
+
+    Primitive:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          $ref: '#/components/schemas/PrimitiveType'
+        name:
+          type: string
+        status:
+          $ref: '#/components/schemas/PrimitiveStatus'
+        config:
+          type: object
+        stats:
+          type: object
+          properties:
+            invocationCount:
+              type: integer
+            errorCount:
+              type: integer
+            avgDuration:
+              type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PrimitiveResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/Primitive'
+
+    CreatePrimitiveRequest:
+      type: object
+      required: [type, name, config]
+      properties:
+        type:
+          $ref: '#/components/schemas/PrimitiveType'
+        name:
+          type: string
+        config:
+          type: object
+
+    UpdatePrimitiveRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        config:
+          type: object
+
+    InvokeRequest:
+      type: object
+      required: [payload]
+      properties:
+        payload:
+          type: object
+        timeout:
+          type: string
+
+    InvokeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            result:
+              type: object
+            duration:
+              type: integer
+            phase:
+              $ref: '#/components/schemas/Phase'
+
+    StoreEntryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            key:
+              type: string
+            value:
+              type: object
+            metadata:
+              type: object
+              properties:
+                version:
+                  type: integer
+                createdAt:
+                  type: string
+                  format: date-time
+                updatedAt:
+                  type: string
+                  format: date-time
+                ttl:
+                  type: string
+                  format: date-time
+                  nullable: true
+
+    SetValueRequest:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: object
+        ttl:
+          type: string
+
+    ClusterResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            clusterId:
+              type: string
+            leader:
+              type: string
+              nullable: true
+            nodes:
+              type: array
+              items:
+                $ref: '#/components/schemas/Node'
+            healthy:
+              type: integer
+            total:
+              type: integer
+
+    Node:
+      type: object
+      properties:
+        id:
+          type: string
+        address:
+          type: string
+        status:
+          type: string
+          enum: [healthy, unhealthy, unknown]
+        role:
+          type: string
+          enum: [leader, follower]
+        phase:
+          $ref: '#/components/schemas/Phase'
+        metrics:
+          type: object
+          properties:
+            cpu:
+              type: number
+            memory:
+              type: number
+            connections:
+              type: integer
+
+    NodeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/Node'
+
+    DeleteResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            deleted:
+              type: boolean
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+
+    ReadinessResponse:
+      type: object
+      properties:
+        ready:
+          type: boolean
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+
+    LivenessResponse:
+      type: object
+      properties:
+        alive:
+          type: boolean
+        uptime:
+          type: integer
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []

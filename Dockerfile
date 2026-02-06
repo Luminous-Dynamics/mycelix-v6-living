@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y \
 # Copy workspace files
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+COPY benches ./benches
+COPY migrations ./migrations
 
 # Build release binary
 RUN cargo build --release -p ws-server

@@ -22,7 +22,7 @@ use tokio::sync::oneshot;
 use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
-use ws_server::{ServerConfig, WebSocketServer};
+use ws_server::{AuthConfig, RateLimitConfig, ServerConfig, WebSocketServer};
 
 /// Helper to find an available port.
 fn get_available_port() -> u16 {
@@ -39,6 +39,8 @@ async fn start_test_server() -> (SocketAddr, oneshot::Sender<()>) {
         bind_addr: addr,
         health_addr: None, // Disable health server in tests
         broadcast_capacity: 64,
+        rate_limit: RateLimitConfig::default(),
+        auth: AuthConfig::default(),
     };
 
     // Create server with simulated time for faster tests
@@ -323,6 +325,8 @@ async fn start_test_server_with_health() -> (SocketAddr, SocketAddr, oneshot::Se
         bind_addr: ws_addr,
         health_addr: Some(health_addr),
         broadcast_capacity: 64,
+        rate_limit: RateLimitConfig::default(),
+        auth: AuthConfig::default(),
     };
 
     let engine = cycle_engine::CycleEngineBuilder::new()

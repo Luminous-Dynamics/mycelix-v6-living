@@ -7,6 +7,9 @@
 //! - OpenTelemetry tracing support
 //! - Security features (rate limiting, authentication)
 //! - Optional REST API
+//! - Optional GraphQL API with subscriptions
+//! - Optional Server-Sent Events (SSE) endpoint
+//! - Optional Webhook delivery
 //!
 //! # Usage
 //!
@@ -34,6 +37,21 @@
 //!
 //! # With REST API enabled
 //! cargo run -p ws-server -- --enable-rest --rest-port 8890
+//!
+//! # With GraphQL API enabled (requires 'graphql' feature)
+//! cargo run -p ws-server --features graphql -- --enable-graphql --graphql-port 8891
+//!
+//! # With SSE endpoint enabled (requires 'sse' feature)
+//! cargo run -p ws-server --features sse -- --enable-sse --sse-port 8892
+//!
+//! # With webhook delivery (requires 'webhooks' feature)
+//! cargo run -p ws-server --features webhooks -- --webhook-url https://example.com/webhook --webhook-secret mysecret --webhook-events PhaseTransitioned,CycleStarted
+//!
+//! # With database persistence
+//! cargo run -p ws-server --features sqlite -- --database-url sqlite:./mycelix.db
+//!
+//! # With PostgreSQL (requires postgres feature)
+//! cargo run -p ws-server --features postgres -- --database-url postgres://user:pass@localhost/mycelix
 //! ```
 
 use std::net::SocketAddr;
@@ -43,8 +61,15 @@ use tracing::info;
 
 use ws_server::{
     telemetry::{self, TelemetryConfig},
-    AuthConfig, RateLimitConfig, RestConfig, RestServer, ServerConfig, WebSocketServer,
+    AdminConfig, AdminServer, AuthConfig, RateLimitConfig, RestConfig, RestServer,
+    ServerConfig, ServerConfigResponse, WebSocketServer,
 };
+
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+use ws_server::ServerMetrics;
+
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+use ws_server::{PersistenceConfig, create_repository};
 
 /// Mycelix Living Protocol WebSocket RPC Server
 #[derive(Parser, Debug)]
@@ -124,6 +149,75 @@ struct Args {
     /// CORS allowed origins for REST API (comma-separated, empty = allow all)
     #[arg(long, value_delimiter = ',')]
     cors_origins: Vec<String>,
+
+    // === GraphQL Options (requires 'graphql' feature) ===
+    /// Enable GraphQL API with subscriptions
+    #[arg(long)]
+    enable_graphql: bool,
+
+    /// Port for GraphQL server (only with --enable-graphql)
+    #[arg(long, default_value_t = 8891)]
+    graphql_port: u16,
+
+    /// Disable GraphQL Playground
+    #[arg(long)]
+    no_graphql_playground: bool,
+
+    // === SSE Options (requires 'sse' feature) ===
+    /// Enable Server-Sent Events endpoint at /api/v1/events
+    #[arg(long)]
+    enable_sse: bool,
+
+    /// Port for SSE server (only with --enable-sse)
+    #[arg(long, default_value_t = 8892)]
+    sse_port: u16,
+
+    // === Webhook Options (requires 'webhooks' feature) ===
+    /// Webhook URL to deliver events to
+    #[arg(long)]
+    webhook_url: Option<String>,
+
+    /// Secret key for webhook HMAC-SHA256 signing
+    #[arg(long)]
+    webhook_secret: Option<String>,
+
+    /// Comma-separated list of event types to send to webhook (empty = all events)
+    #[arg(long, value_delimiter = ',')]
+    webhook_events: Vec<String>,
+
+    // === Admin Panel Options ===
+    /// Enable web-based admin panel
+    #[arg(long)]
+    enable_admin: bool,
+
+    /// Port for admin panel server (only with --enable-admin)
+    #[arg(long, default_value_t = 8891)]
+    admin_port: u16,
+
+    /// Password for admin panel (basic auth, username is "admin")
+    #[arg(long)]
+    admin_password: Option<String>,
+
+    // === Persistence Options ===
+    /// Database URL for persistence (sqlite:./path.db or postgres://user:pass@host/db)
+    #[arg(long, default_value = "sqlite:./mycelix.db")]
+    database_url: String,
+
+    /// Number of days to retain historical metrics and events
+    #[arg(long, default_value_t = 30)]
+    metrics_retention_days: u32,
+
+    /// Interval in seconds for saving metrics snapshots to database
+    #[arg(long, default_value_t = 60)]
+    metrics_snapshot_interval: u64,
+
+    /// Disable database persistence
+    #[arg(long)]
+    no_persistence: bool,
+
+    /// Disable automatic database migrations
+    #[arg(long)]
+    no_auto_migrate: bool,
 }
 
 #[tokio::main]
@@ -221,21 +315,19 @@ async fn main() -> anyhow::Result<()> {
             "Authentication enabled with API keys"
         );
         AuthConfig::with_api_keys(args.api_keys.clone())
-    } else {
-        if !args.api_keys.is_empty() {
-            info!(
-                key_count = args.api_keys.len(),
-                "API keys configured (optional authentication)"
-            );
-            let mut config = AuthConfig::default();
-            for key in &args.api_keys {
-                config.add_api_key(key);
-            }
-            config
-        } else {
-            info!("Authentication disabled (anonymous access allowed)");
-            AuthConfig::default()
+    } else if !args.api_keys.is_empty() {
+        info!(
+            key_count = args.api_keys.len(),
+            "API keys configured (optional authentication)"
+        );
+        let mut config = AuthConfig::default();
+        for key in &args.api_keys {
+            config.add_api_key(key);
         }
+        config
+    } else {
+        info!("Authentication disabled (anonymous access allowed)");
+        AuthConfig::default()
     };
 
     // Create server config
@@ -245,6 +337,40 @@ async fn main() -> anyhow::Result<()> {
         broadcast_capacity: 1024,
         rate_limit: rate_limit_config,
         auth: auth_config,
+    };
+
+    // Initialize persistence layer if enabled
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    let repository = if !args.no_persistence {
+        let persistence_config = PersistenceConfig {
+            database_url: args.database_url.clone(),
+            backend: None, // Auto-detect from URL
+            retention_days: args.metrics_retention_days,
+            auto_migrate: !args.no_auto_migrate,
+            metrics_snapshot_interval_secs: args.metrics_snapshot_interval,
+            ..Default::default()
+        };
+
+        match create_repository(&persistence_config).await {
+            Ok(repo) => {
+                info!(
+                    database_url = %args.database_url,
+                    retention_days = args.metrics_retention_days,
+                    "Database persistence enabled"
+                );
+                Some(repo)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "Failed to initialize database persistence, continuing without it"
+                );
+                None
+            }
+        }
+    } else {
+        info!("Database persistence disabled");
+        None
     };
 
     // Create and run server
@@ -258,10 +384,106 @@ async fn main() -> anyhow::Result<()> {
         WebSocketServer::new(config)
     };
 
+    // Start persistence background tasks if enabled
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    if let Some(repo) = repository.clone() {
+        let engine_for_persistence = server.engine();
+        let metrics_for_persistence = server.metrics();
+        let retention_days = args.metrics_retention_days;
+        let snapshot_interval = args.metrics_snapshot_interval;
+
+        // Spawn metrics snapshot task
+        tokio::spawn(async move {
+            use tokio::time::{interval, Duration};
+            use std::sync::atomic::Ordering;
+
+            let mut tick = interval(Duration::from_secs(snapshot_interval));
+            let mut cleanup_counter = 0u64;
+
+            loop {
+                tick.tick().await;
+
+                // Get current state
+                let engine = engine_for_persistence.read().await;
+                let cycle_number = engine.cycle_number();
+                let phase = engine.current_phase();
+                let phase_metrics = engine.phase_metrics(phase);
+                drop(engine);
+
+                // Get server metrics
+                let server_metrics = ServerMetrics {
+                    active_connections: metrics_for_persistence.active_connections.load(Ordering::Relaxed),
+                    total_connections: metrics_for_persistence.total_connections.load(Ordering::Relaxed),
+                    messages_received: metrics_for_persistence.messages_received.load(Ordering::Relaxed),
+                    messages_sent: metrics_for_persistence.messages_sent.load(Ordering::Relaxed),
+                    uptime_seconds: 0, // Not easily accessible here
+                };
+
+                // Save metrics snapshot
+                if let Err(e) = repo.save_metrics(cycle_number, phase, &server_metrics, &phase_metrics).await {
+                    tracing::warn!(error = %e, "Failed to save metrics snapshot");
+                }
+
+                // Run cleanup every hour (60 snapshots at 60s interval)
+                cleanup_counter += 1;
+                if cleanup_counter >= 60 {
+                    cleanup_counter = 0;
+                    if let Err(e) = repo.cleanup_old_data(retention_days).await {
+                        tracing::warn!(error = %e, "Failed to cleanup old data");
+                    }
+                }
+            }
+        });
+    }
+
     info!(
         ws_url = format!("ws://{}:{}", args.host, args.port),
         "Server ready, waiting for connections"
     );
+
+    // Start admin panel server if enabled
+    if args.enable_admin {
+        let admin_addr: SocketAddr = format!("{}:{}", args.host, args.admin_port)
+            .parse()
+            .map_err(|e| anyhow::anyhow!("Invalid admin address: {}", e))?;
+
+        let admin_config = AdminConfig {
+            bind_addr: admin_addr,
+            password: args.admin_password.clone(),
+            test_mode: args.simulated_time,
+        };
+
+        let server_config_response = ServerConfigResponse {
+            bind_addr: bind_addr.to_string(),
+            health_addr: health_addr.map(|a| a.to_string()),
+            max_connections: args.max_connections,
+            max_connections_per_ip: args.max_connections_per_ip,
+            rate_limit: args.rate_limit,
+            rate_limit_burst: args.rate_limit_burst,
+            auth_required: args.require_auth,
+            test_mode: args.simulated_time,
+        };
+
+        let admin_server = AdminServer::new(
+            admin_config,
+            server.engine(),
+            server.metrics(),
+            server_config_response,
+        );
+
+        info!(
+            admin_url = format!("http://{}:{}", args.host, args.admin_port),
+            auth = args.admin_password.is_some(),
+            "Admin panel enabled"
+        );
+
+        // Run admin server in background
+        tokio::spawn(async move {
+            if let Err(e) = admin_server.run().await {
+                tracing::error!(error = %e, "Admin panel server error");
+            }
+        });
+    }
 
     // Start REST API server if enabled
     if args.enable_rest {
@@ -291,6 +513,120 @@ async fn main() -> anyhow::Result<()> {
                 tracing::error!(error = %e, "REST API server error");
             }
         });
+    }
+
+    // Start GraphQL API server if enabled
+    #[cfg(feature = "graphql")]
+    if args.enable_graphql {
+        use ws_server::{run_graphql_server, GraphQLConfig};
+
+        let graphql_config = GraphQLConfig {
+            port: args.graphql_port,
+            host: args.host.clone(),
+            playground: !args.no_graphql_playground,
+            introspection: true,
+        };
+
+        let engine = server.engine();
+        let event_tx = server.event_sender();
+
+        info!(
+            graphql_url = format!("http://{}:{}/graphql", args.host, args.graphql_port),
+            playground = !args.no_graphql_playground,
+            "GraphQL API enabled"
+        );
+
+        tokio::spawn(async move {
+            if let Err(e) = run_graphql_server(graphql_config, engine, event_tx).await {
+                tracing::error!(error = %e, "GraphQL server error");
+            }
+        });
+    }
+
+    #[cfg(not(feature = "graphql"))]
+    if args.enable_graphql {
+        tracing::warn!(
+            "--enable-graphql specified but 'graphql' feature is not enabled. \
+             Rebuild with --features graphql to enable GraphQL support."
+        );
+    }
+
+    // Start SSE server if enabled
+    #[cfg(feature = "sse")]
+    if args.enable_sse {
+        use ws_server::{run_sse_server, SseConfig};
+
+        let sse_config = SseConfig {
+            port: args.sse_port,
+            host: args.host.clone(),
+            keep_alive_seconds: 30,
+        };
+
+        let event_tx = server.event_sender();
+
+        info!(
+            sse_url = format!("http://{}:{}/api/v1/events", args.host, args.sse_port),
+            "SSE endpoint enabled"
+        );
+
+        tokio::spawn(async move {
+            if let Err(e) = run_sse_server(sse_config, event_tx).await {
+                tracing::error!(error = %e, "SSE server error");
+            }
+        });
+    }
+
+    #[cfg(not(feature = "sse"))]
+    if args.enable_sse {
+        tracing::warn!(
+            "--enable-sse specified but 'sse' feature is not enabled. \
+             Rebuild with --features sse to enable SSE support."
+        );
+    }
+
+    // Start webhook dispatcher if configured
+    #[cfg(feature = "webhooks")]
+    if let Some(webhook_url) = args.webhook_url {
+        use std::sync::Arc as WebhookArc;
+        use ws_server::{WebhookConfig, WebhookManager};
+
+        let webhook_secret = args.webhook_secret.unwrap_or_else(|| {
+            tracing::warn!("No --webhook-secret provided, using empty secret. This is insecure!");
+            String::new()
+        });
+
+        let events: std::collections::HashSet<String> = if args.webhook_events.is_empty() {
+            std::collections::HashSet::new() // All events
+        } else {
+            args.webhook_events.into_iter().collect()
+        };
+
+        let webhook_config = WebhookConfig::new(webhook_url.clone(), webhook_secret)
+            .with_events(events.clone());
+
+        let manager = WebhookArc::new(WebhookManager::new());
+        manager.register(webhook_config).await;
+
+        let event_rx = server.event_sender().subscribe();
+
+        info!(
+            webhook_url = %webhook_url,
+            event_filter = ?events,
+            "Webhook delivery enabled"
+        );
+
+        let manager_clone = WebhookArc::clone(&manager);
+        tokio::spawn(async move {
+            manager_clone.start_dispatcher(event_rx).await;
+        });
+    }
+
+    #[cfg(not(feature = "webhooks"))]
+    if args.webhook_url.is_some() {
+        tracing::warn!(
+            "--webhook-url specified but 'webhooks' feature is not enabled. \
+             Rebuild with --features webhooks to enable webhook support."
+        );
     }
 
     let result = server.run().await;

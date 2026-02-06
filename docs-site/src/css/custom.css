@@ -1,0 +1,187 @@
+/**
+ * Mycelix custom theme styles
+ */
+
+:root {
+  /* Primary colors - Deep purple/indigo inspired by mycelium */
+  --ifm-color-primary: #7c3aed;
+  --ifm-color-primary-dark: #6d28d9;
+  --ifm-color-primary-darker: #5b21b6;
+  --ifm-color-primary-darkest: #4c1d95;
+  --ifm-color-primary-light: #8b5cf6;
+  --ifm-color-primary-lighter: #a78bfa;
+  --ifm-color-primary-lightest: #c4b5fd;
+
+  /* Code font */
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(124, 58, 237, 0.1);
+
+  /* Border radius */
+  --ifm-code-border-radius: 4px;
+  --ifm-global-radius: 8px;
+
+  /* Shadows */
+  --ifm-global-shadow-lw: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --ifm-global-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --ifm-global-shadow-tl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+/* Dark mode colors */
+[data-theme='dark'] {
+  --ifm-color-primary: #a78bfa;
+  --ifm-color-primary-dark: #8b5cf6;
+  --ifm-color-primary-darker: #7c3aed;
+  --ifm-color-primary-darkest: #6d28d9;
+  --ifm-color-primary-light: #c4b5fd;
+  --ifm-color-primary-lighter: #ddd6fe;
+  --ifm-color-primary-lightest: #ede9fe;
+
+  --ifm-background-color: #0f0f1a;
+  --ifm-background-surface-color: #1a1a2e;
+
+  --docusaurus-highlighted-code-line-bg: rgba(167, 139, 250, 0.15);
+}
+
+/* Navbar styling */
+.navbar {
+  box-shadow: var(--ifm-global-shadow-lw);
+}
+
+.navbar__title {
+  font-weight: 700;
+}
+
+/* Hero styling */
+.hero {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
+}
+
+.hero__title {
+  font-size: 3.5rem;
+  font-weight: 800;
+}
+
+.hero__subtitle {
+  font-size: 1.5rem;
+  opacity: 0.9;
+}
+
+/* Button styling */
+.button {
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.button:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ifm-global-shadow-md);
+}
+
+/* Code blocks */
+pre {
+  border-radius: var(--ifm-code-border-radius);
+}
+
+code {
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+}
+
+/* Tables */
+table {
+  border-radius: var(--ifm-global-radius);
+  overflow: hidden;
+}
+
+th {
+  background-color: var(--ifm-background-surface-color);
+}
+
+/* Admonitions */
+.admonition {
+  border-radius: var(--ifm-global-radius);
+}
+
+/* Sidebar */
+.menu__link {
+  border-radius: 4px;
+}
+
+.menu__link--active {
+  background-color: rgba(124, 58, 237, 0.1);
+}
+
+/* Footer */
+.footer {
+  background-color: #0f0f1a;
+}
+
+.footer__title {
+  color: var(--ifm-color-primary-light);
+}
+
+/* Phase indicator colors */
+.phase-dawn {
+  color: #fbbf24;
+}
+
+.phase-surge {
+  color: #ef4444;
+}
+
+.phase-settle {
+  color: #3b82f6;
+}
+
+.phase-rest {
+  color: #8b5cf6;
+}
+
+/* Mermaid diagram styling */
+.mermaid {
+  background-color: var(--ifm-background-surface-color);
+  padding: 1rem;
+  border-radius: var(--ifm-global-radius);
+}
+
+/* API reference styling */
+.api-method {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.api-method--get {
+  background-color: #10b981;
+  color: white;
+}
+
+.api-method--post {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.api-method--put {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.api-method--delete {
+  background-color: #ef4444;
+  color: white;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 996px) {
+  .hero__title {
+    font-size: 2.5rem;
+  }
+
+  .hero__subtitle {
+    font-size: 1.25rem;
+  }
+}

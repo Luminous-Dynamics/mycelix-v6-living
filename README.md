@@ -1,5 +1,13 @@
 # Mycelix v6.0 Living Protocol Layer
 
+[![Crates.io](https://img.shields.io/crates/v/living-core.svg)](https://crates.io/crates/living-core)
+[![npm](https://img.shields.io/npm/v/@mycelix/living-protocol-sdk.svg)](https://www.npmjs.com/package/@mycelix/living-protocol-sdk)
+[![PyPI](https://img.shields.io/pypi/v/mycelix.svg)](https://pypi.org/project/mycelix/)
+[![Go Reference](https://pkg.go.dev/badge/github.com/mycelix/mycelix-go.svg)](https://pkg.go.dev/github.com/mycelix/mycelix-go)
+[![CI](https://github.com/mycelix/mycelix-v6-living/actions/workflows/ci.yml/badge.svg)](https://github.com/mycelix/mycelix-v6-living/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fmycelix%2Fmycelix--v6--living-blue)](https://ghcr.io/mycelix/mycelix-v6-living)
+
 A bioregional protocol implementation with 21 living primitives for decentralized coordination, consciousness integration, and regenerative governance.
 
 ## Overview

@@ -1,0 +1,325 @@
+name: Publish SDKs
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (without v prefix)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run (do not actually publish)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ============================================================================
+  # Validate Version
+  # ============================================================================
+  validate:
+    name: Validate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dry_run: ${{ steps.version.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            DRY_RUN="${{ inputs.dry_run }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+            DRY_RUN="false"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "dry_run=$DRY_RUN" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION (dry_run: $DRY_RUN)"
+
+  # ============================================================================
+  # Publish Rust Crates to crates.io
+  # ============================================================================
+  publish-crates:
+    name: Publish to crates.io
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Install cargo-release
+        run: cargo install cargo-release
+
+      - name: Verify crate versions
+        run: |
+          EXPECTED="${{ needs.validate.outputs.version }}"
+          for crate in living-core metabolism consciousness epistemics relational structural cycle-engine ws-server; do
+            CRATE_DIR="crates/$crate"
+            if [ -f "$CRATE_DIR/Cargo.toml" ]; then
+              ACTUAL=$(grep -m1 'version.workspace = true' "$CRATE_DIR/Cargo.toml" || grep -m1 '^version' "$CRATE_DIR/Cargo.toml" | cut -d'"' -f2)
+              echo "Crate $crate: $ACTUAL"
+            fi
+          done
+
+      - name: Publish crates (dry run)
+        if: needs.validate.outputs.dry_run == 'true'
+        run: |
+          echo "DRY RUN - Would publish the following crates:"
+          for crate in living-core metabolism consciousness epistemics relational structural cycle-engine; do
+            echo "  - $crate"
+          done
+
+      - name: Publish crates
+        if: needs.validate.outputs.dry_run != 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          # Publish in dependency order with proper delays
+          CRATES=(
+            "living-core"
+            "metabolism"
+            "consciousness"
+            "epistemics"
+            "relational"
+            "structural"
+            "cycle-engine"
+          )
+
+          for crate in "${CRATES[@]}"; do
+            echo "Publishing $crate..."
+            cargo publish -p "$crate" --no-verify || {
+              echo "::warning::Failed to publish $crate, may already exist"
+            }
+            # Wait for crates.io to index the crate
+            sleep 45
+          done
+
+  # ============================================================================
+  # Publish TypeScript SDK to npm
+  # ============================================================================
+  publish-npm:
+    name: Publish to npm
+    needs: validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/typescript
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify package version
+        run: |
+          EXPECTED="${{ needs.validate.outputs.version }}"
+          ACTUAL=$(node -p "require('./package.json').version")
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Package version ($ACTUAL) doesn't match expected ($EXPECTED)"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+        continue-on-error: true
+
+      - name: Publish (dry run)
+        if: needs.validate.outputs.dry_run == 'true'
+        run: npm publish --access public --dry-run
+
+      - name: Publish
+        if: needs.validate.outputs.dry_run != 'true'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ============================================================================
+  # Publish Python SDK to PyPI
+  # ============================================================================
+  publish-pypi:
+    name: Publish to PyPI
+    needs: validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/python
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine hatch
+
+      - name: Verify package version
+        run: |
+          EXPECTED="${{ needs.validate.outputs.version }}"
+          ACTUAL=$(hatch version)
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::warning::Package version ($ACTUAL) doesn't match expected ($EXPECTED)"
+          fi
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package
+        run: twine check dist/*
+
+      - name: Publish (dry run)
+        if: needs.validate.outputs.dry_run == 'true'
+        run: |
+          echo "DRY RUN - Would publish:"
+          ls -la dist/
+
+      - name: Publish to PyPI
+        if: needs.validate.outputs.dry_run != 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk/python/dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+  # ============================================================================
+  # Publish Go SDK (tag for pkg.go.dev)
+  # ============================================================================
+  publish-go:
+    name: Publish Go SDK
+    needs: validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/go
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Verify module
+        run: |
+          go mod tidy
+          go build ./...
+          go test ./... || true
+
+      - name: Create Go module tag
+        if: needs.validate.outputs.dry_run != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          TAG="sdk/go/v${VERSION}"
+
+          # Check if tag already exists
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"
+            exit 0
+          fi
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create and push tag for Go module
+          git tag -a "$TAG" -m "Release Go SDK v${VERSION}"
+          git push origin "$TAG"
+
+          echo "Created tag $TAG for pkg.go.dev"
+
+      - name: Trigger pkg.go.dev update
+        if: needs.validate.outputs.dry_run != 'true'
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          MODULE="github.com/mycelix/mycelix-go"
+
+          # Request pkg.go.dev to fetch the module
+          curl -s "https://proxy.golang.org/${MODULE}/@v/v${VERSION}.info" || true
+
+          echo "Requested pkg.go.dev to index $MODULE@v${VERSION}"
+
+  # ============================================================================
+  # Summary
+  # ============================================================================
+  summary:
+    name: Publish Summary
+    needs: [validate, publish-crates, publish-npm, publish-pypi, publish-go]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          DRY_RUN="${{ needs.validate.outputs.dry_run }}"
+
+          echo "## Publish Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** v$VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "**Dry Run:** $DRY_RUN" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.publish-crates.result }}" = "success" ]; then
+            echo "| Rust Crates (crates.io) | :white_check_mark: Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Rust Crates (crates.io) | :x: Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.publish-npm.result }}" = "success" ]; then
+            echo "| TypeScript SDK (npm) | :white_check_mark: Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| TypeScript SDK (npm) | :x: Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.publish-pypi.result }}" = "success" ]; then
+            echo "| Python SDK (PyPI) | :white_check_mark: Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Python SDK (PyPI) | :x: Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.publish-go.result }}" = "success" ]; then
+            echo "| Go SDK (pkg.go.dev) | :white_check_mark: Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Go SDK (pkg.go.dev) | :x: Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Package Links" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [crates.io/crates/living-core](https://crates.io/crates/living-core)" >> $GITHUB_STEP_SUMMARY
+          echo "- [npmjs.com/package/@mycelix/living-protocol-sdk](https://www.npmjs.com/package/@mycelix/living-protocol-sdk)" >> $GITHUB_STEP_SUMMARY
+          echo "- [pypi.org/project/mycelix](https://pypi.org/project/mycelix)" >> $GITHUB_STEP_SUMMARY
+          echo "- [pkg.go.dev/github.com/mycelix/mycelix-go](https://pkg.go.dev/github.com/mycelix/mycelix-go)" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,27 @@
+[plugin]
+name = "metrics-export"
+version = "0.1.0"
+description = "Export cycle engine metrics to external monitoring systems"
+authors = ["Mycelix Team"]
+license = "MIT OR Apache-2.0"
+library = "cycle_plugin_metrics_export"
+entry_point = "create_plugin"
+
+[config]
+enabled = true
+
+[config.settings]
+# Export format: "prometheus", "statsd", "json"
+export_format = "prometheus"
+# Endpoint URL (for push-based exports)
+endpoint = ""
+# Export interval in seconds
+export_interval_secs = 60
+# Whether to include phase-specific metrics
+include_phase_metrics = true
+# Whether to include event counts
+include_event_counts = true
+# Metric prefix
+metric_prefix = "mycelix_cycle"
+# Labels to add to all metrics
+labels = {}

@@ -1,0 +1,29 @@
+[plugin]
+name = "notification"
+version = "0.1.0"
+description = "Send notifications on phase changes and important events"
+authors = ["Mycelix Team"]
+license = "MIT OR Apache-2.0"
+library = "cycle_plugin_notification"
+entry_point = "create_plugin"
+
+[config]
+enabled = true
+
+[config.settings]
+# Notification channels: "webhook", "email", "slack", "discord"
+channels = ["webhook"]
+# Webhook URL for HTTP notifications
+webhook_url = ""
+# Events to notify on
+notify_on_phase_transition = true
+notify_on_cycle_start = true
+notify_on_cycle_complete = true
+notify_on_wounds = true
+notify_on_kenosis = true
+# Minimum severity for wound notifications: "minor", "moderate", "severe", "critical"
+min_wound_severity = "moderate"
+# Rate limit: maximum notifications per minute
+max_notifications_per_minute = 10
+# Include metrics in notifications
+include_metrics = true

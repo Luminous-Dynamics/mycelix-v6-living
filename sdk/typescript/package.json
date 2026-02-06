@@ -3,14 +3,43 @@
   "version": "0.6.0",
   "description": "TypeScript SDK for Mycelix v6.0 Living Protocol Layer",
   "main": "dist/index.js",
+  "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "license": "AGPL-3.0-or-later",
+  "homepage": "https://mycelix.io",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mycelix/mycelix-v6-living.git",
+    "directory": "sdk/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/mycelix/mycelix-v6-living/issues"
+  },
+  "keywords": [
+    "mycelix",
+    "living-protocol",
+    "holochain",
+    "bioregional",
+    "metabolism-cycle",
+    "websocket",
+    "decentralized"
+  ],
+  "author": "Mycelix Contributors",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "jest --testPathIgnorePatterns=integration",
     "test:integration": "jest tests/integration.test.ts --testTimeout=30000",
     "test:all": "jest --testTimeout=30000",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
     "@holochain/client": "^0.18.0"

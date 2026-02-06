@@ -178,6 +178,12 @@ impl WebSocketServer {
         Arc::clone(&self.metrics)
     }
 
+    /// Get the event broadcast sender for integration with other systems.
+    /// This allows GraphQL subscriptions, SSE, and webhooks to receive events.
+    pub fn event_sender(&self) -> broadcast::Sender<String> {
+        self.event_tx.clone()
+    }
+
     /// Start the WebSocket server.
     pub async fn run(&self) -> anyhow::Result<()> {
         let listener = TcpListener::bind(&self.config.bind_addr).await?;

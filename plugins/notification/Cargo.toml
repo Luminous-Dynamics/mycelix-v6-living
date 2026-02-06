@@ -1,0 +1,20 @@
+[package]
+name = "cycle-plugin-notification"
+description = "Send notifications on phase changes and events"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cycle-engine = { path = "../../crates/cycle-engine" }
+living-core = { path = "../../crates/living-core" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+
+[features]
+default = []

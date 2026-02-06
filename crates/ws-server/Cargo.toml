@@ -5,13 +5,29 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
 authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+publish = true
 
 [features]
-default = []
+default = ["sqlite"]
 otlp = ["opentelemetry-otlp", "opentelemetry_sdk/rt-tokio"]
 # Enable JWT authentication support
 jwt = ["dep:jsonwebtoken"]
+# Enable GraphQL API
+graphql = ["async-graphql", "async-graphql-axum", "axum", "async-stream"]
+# Enable SSE (Server-Sent Events)
+sse = ["axum", "tokio-stream"]
+# Enable Webhooks
+webhooks = ["reqwest", "hmac", "sha2", "hex"]
+# Database backends for persistence
+sqlite = ["sqlx/sqlite", "sqlx/runtime-tokio"]
+postgres = ["sqlx/postgres", "sqlx/runtime-tokio"]
 
 [[bin]]
 name = "mycelix-ws-server"
@@ -37,7 +53,7 @@ chrono = { workspace = true }
 # Logging and Tracing
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tracing-opentelemetry = "0.27"
+tracing-opentelemetry = "0.28"
 opentelemetry = "0.27"
 opentelemetry_sdk = { version = "0.27", features = ["trace"] }
 opentelemetry-otlp = { version = "0.27", features = ["tonic"], optional = true }
@@ -51,6 +67,28 @@ anyhow = { workspace = true }
 
 # JWT authentication (optional)
 jsonwebtoken = { version = "9.3", optional = true }
+
+# GraphQL (optional)
+async-graphql = { version = "7.0", optional = true }
+async-graphql-axum = { version = "7.0", optional = true }
+axum = { version = "0.8", optional = true }
+async-stream = { version = "0.3", optional = true }
+
+# SSE / Streaming (optional)
+tokio-stream = { version = "0.1", features = ["sync"], optional = true }
+
+# Webhooks (optional)
+reqwest = { version = "0.12", features = ["json"], optional = true }
+hmac = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+hex = { version = "0.4", optional = true }
+
+# UUID for webhook IDs
+uuid = { workspace = true }
+
+# Database persistence
+sqlx = { version = "0.8", features = ["chrono"], optional = true }
+async-trait = "0.1"
 
 [dev-dependencies]
 tokio-test = "0.4"

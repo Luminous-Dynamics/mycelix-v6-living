@@ -5,49 +5,90 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+  packages: write
+
 env:
   CARGO_TERM_COLOR: always
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   # ============================================================================
-  # Create Release
+  # Validate Release Tag
   # ============================================================================
-  create-release:
-    name: Create Release
+  validate:
+    name: Validate Release
     runs-on: ubuntu-latest
     outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.version.outputs.version }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
     steps:
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Check if prerelease
+          if [[ "$VERSION" == *"alpha"* ]] || [[ "$VERSION" == *"beta"* ]] || [[ "$VERSION" == *"rc"* ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify Cargo.toml version
+        run: |
+          CARGO_VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "$CARGO_VERSION" != "${{ steps.version.outputs.version }}" ]; then
+            echo "::error::Tag version (${{ steps.version.outputs.version }}) doesn't match Cargo.toml version ($CARGO_VERSION)"
+            exit 1
+          fi
 
   # ============================================================================
-  # Build Release Artifacts
+  # Build Release Binaries
   # ============================================================================
-  build-artifacts:
-    name: Build Artifacts
-    needs: create-release
+  build-binaries:
+    name: Build ${{ matrix.target }}
+    needs: validate
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
+          # Linux x64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: mycelix-living-linux-x64
-          - os: macos-latest
+            cross: false
+          # Linux arm64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: mycelix-living-linux-arm64
+            cross: true
+          # macOS x64
+          - os: macos-13
             target: x86_64-apple-darwin
             artifact_name: mycelix-living-macos-x64
+            cross: false
+          # macOS arm64
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: mycelix-living-macos-arm64
+            cross: false
+          # Windows x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: mycelix-living-windows-x64
+            cross: false
+          # Windows arm64
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            artifact_name: mycelix-living-windows-arm64
+            cross: false
     steps:
       - uses: actions/checkout@v4
 
@@ -56,134 +97,237 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }} --features full
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
-      - name: Package artifacts
+      - name: Build release binary
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }} -p ws-server
+          else
+            cargo build --release --target ${{ matrix.target }} -p ws-server
+          fi
+        shell: bash
+
+      - name: Package artifacts (Unix)
+        if: runner.os != 'Windows'
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/libcycle_engine.rlib dist/ || true
-          cp target/${{ matrix.target }}/release/*.so dist/ || true
-          cp target/${{ matrix.target }}/release/*.dylib dist/ || true
-          tar -czvf ${{ matrix.artifact_name }}.tar.gz -C dist .
+          cp target/${{ matrix.target }}/release/mycelix-ws-server dist/ 2>/dev/null || true
+          cp target/${{ matrix.target }}/release/libcycle_engine.* dist/ 2>/dev/null || true
+          cp target/${{ matrix.target }}/release/*.so dist/ 2>/dev/null || true
+          cp target/${{ matrix.target }}/release/*.dylib dist/ 2>/dev/null || true
+          cp README.md LICENSE dist/ 2>/dev/null || true
+          cd dist && tar -czvf ../${{ matrix.artifact_name }}.tar.gz .
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./${{ matrix.artifact_name }}.tar.gz
-          asset_name: ${{ matrix.artifact_name }}.tar.gz
-          asset_content_type: application/gzip
-
-  # ============================================================================
-  # Publish Crates
-  # ============================================================================
-  publish-crates:
-    name: Publish to crates.io
-    needs: build-artifacts
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
-
-      - name: Publish crates
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Package artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          # Publish in dependency order
-          cargo publish -p living-core --allow-dirty || true
-          sleep 30
-          cargo publish -p metabolism --allow-dirty || true
-          cargo publish -p consciousness --allow-dirty || true
-          cargo publish -p epistemics --allow-dirty || true
-          cargo publish -p relational --allow-dirty || true
-          cargo publish -p structural --allow-dirty || true
-          sleep 30
-          cargo publish -p cycle-engine --allow-dirty || true
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item -Path target/${{ matrix.target }}/release/mycelix-ws-server.exe -Destination dist/ -ErrorAction SilentlyContinue
+          Copy-Item -Path target/${{ matrix.target }}/release/*.dll -Destination dist/ -ErrorAction SilentlyContinue
+          Copy-Item -Path README.md,LICENSE -Destination dist/ -ErrorAction SilentlyContinue
+          Compress-Archive -Path dist/* -DestinationPath ${{ matrix.artifact_name }}.zip
 
-  # ============================================================================
-  # Publish NPM Package
-  # ============================================================================
-  publish-npm:
-    name: Publish to npm
-    needs: build-artifacts
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: sdk/typescript
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Publish
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          name: ${{ matrix.artifact_name }}
+          path: |
+            ${{ matrix.artifact_name }}.tar.gz
+            ${{ matrix.artifact_name }}.zip
+          if-no-files-found: warn
 
   # ============================================================================
   # Build Holochain DNA
   # ============================================================================
   build-dna:
     name: Build Holochain DNA
-    needs: create-release
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v24
+        uses: cachix/install-nix-action@v27
         with:
           nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v14
+        with:
+          name: holochain-ci
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        continue-on-error: true
 
       - name: Build DNA
         run: |
           nix develop --command bash -c "
             rustup target add wasm32-unknown-unknown
+
             # Build all zomes
             for zome_dir in zomes/*/coordinator zomes/*/integrity zomes/shared; do
               if [ -f \"\$zome_dir/Cargo.toml\" ]; then
+                echo \"Building \$zome_dir...\"
                 cargo build --release --target wasm32-unknown-unknown --manifest-path \"\$zome_dir/Cargo.toml\"
               fi
             done
+
             # Package DNA
-            hc dna pack dna/ -o mycelix-living-protocol.dna
-            hc app pack . -o mycelix-living-protocol.happ
+            mkdir -p dist
+            if [ -d dna/ ]; then
+              hc dna pack dna/ -o dist/mycelix-living-protocol.dna
+              hc app pack . -o dist/mycelix-living-protocol.happ
+            fi
           "
         continue-on-error: true
 
       - name: Upload DNA artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./mycelix-living-protocol.dna
-          asset_name: mycelix-living-protocol.dna
-          asset_content_type: application/octet-stream
-        continue-on-error: true
+          name: holochain-dna
+          path: |
+            dist/mycelix-living-protocol.dna
+            dist/mycelix-living-protocol.happ
+          if-no-files-found: warn
 
-      - name: Upload hApp artifact
-        uses: actions/upload-release-asset@v1
+  # ============================================================================
+  # Build Docker Image
+  # ============================================================================
+  build-docker:
+    name: Build Docker Image
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================================================
+  # Generate Changelog
+  # ============================================================================
+  changelog:
+    name: Generate Changelog
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Generate changelog for this release
+          git cliff --current --strip header > RELEASE_NOTES.md
+
+          # Output for GitHub Release
+          {
+            echo 'changelog<<EOF'
+            cat RELEASE_NOTES.md
+            echo EOF
+          } >> $GITHUB_OUTPUT
+
+      - name: Upload changelog
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: RELEASE_NOTES.md
+
+  # ============================================================================
+  # Create GitHub Release
+  # ============================================================================
+  create-release:
+    name: Create GitHub Release
+    needs: [validate, build-binaries, build-dna, build-docker, changelog]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.dna" -o -name "*.happ" \) -exec cp {} release-assets/ \;
+          ls -la release-assets/
+
+      - name: Generate checksums
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Mycelix Living Protocol v${{ needs.validate.outputs.version }}
+          body: ${{ needs.changelog.outputs.changelog }}
+          draft: false
+          prerelease: ${{ needs.validate.outputs.is_prerelease == 'true' }}
+          files: |
+            release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./mycelix-living-protocol.happ
-          asset_name: mycelix-living-protocol.happ
-          asset_content_type: application/octet-stream
-        continue-on-error: true
+
+  # ============================================================================
+  # Notify Release
+  # ============================================================================
+  notify:
+    name: Notify Release
+    needs: [validate, create-release]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Send notification
+        run: |
+          if [ "${{ needs.create-release.result }}" = "success" ]; then
+            echo "Release v${{ needs.validate.outputs.version }} created successfully!"
+          else
+            echo "::warning::Release creation had issues, please check the logs"
+          fi

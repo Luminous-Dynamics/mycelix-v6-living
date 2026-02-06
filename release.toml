@@ -1,0 +1,114 @@
+# cargo-release configuration
+# https://github.com/crate-ci/cargo-release
+
+# ============================================================================
+# Global Settings
+# ============================================================================
+
+[workspace]
+# Enable workspace release mode
+allow-branch = ["main", "release/*"]
+
+# Sign tags with git
+sign-tag = false
+sign-commit = false
+
+# Push changes to remote
+push = true
+push-remote = "origin"
+
+# Tag format: v{version}
+tag-name = "v{{version}}"
+tag-message = "Release v{{version}}"
+
+# Changelog generation (handled by git-cliff)
+pre-release-commit-message = "chore(release): prepare for v{{version}}"
+post-release-commit-message = "chore(release): start v{{next_version}} development"
+
+# ============================================================================
+# Pre-release Hooks
+# ============================================================================
+
+pre-release-hook = [
+    "scripts/release.sh",
+    "--check",
+    "{{version}}"
+]
+
+# Replacements for version strings across files
+[[pre-release-replacements]]
+file = "README.md"
+search = "mycelix-living-protocol-sdk@[0-9]+\\.[0-9]+\\.[0-9]+"
+replace = "mycelix-living-protocol-sdk@{{version}}"
+
+[[pre-release-replacements]]
+file = "sdk/typescript/package.json"
+search = '"version": "[0-9]+\\.[0-9]+\\.[0-9]+"'
+replace = '"version": "{{version}}"'
+
+[[pre-release-replacements]]
+file = "sdk/python/pyproject.toml"
+search = 'version = "[0-9]+\\.[0-9]+\\.[0-9]+"'
+replace = 'version = "{{version}}"'
+
+# ============================================================================
+# Package-specific Configuration
+# ============================================================================
+
+# living-core must be published first
+[package.living-core]
+dependent-version = "upgrade"
+
+# Domain crates depend on living-core
+[package.metabolism]
+dependent-version = "upgrade"
+
+[package.consciousness]
+dependent-version = "upgrade"
+
+[package.epistemics]
+dependent-version = "upgrade"
+
+[package.relational]
+dependent-version = "upgrade"
+
+[package.structural]
+dependent-version = "upgrade"
+
+# cycle-engine depends on all domain crates
+[package.cycle-engine]
+dependent-version = "upgrade"
+
+# ws-server is the binary crate
+[package.ws-server]
+dependent-version = "upgrade"
+
+# Benchmark package should not be published
+[package.mycelix-benchmarks]
+release = false
+
+# ============================================================================
+# Publish Order
+# ============================================================================
+
+# Crates are published in dependency order:
+# 1. living-core (no deps)
+# 2. metabolism, consciousness, epistemics, relational, structural (depend on living-core)
+# 3. cycle-engine (depends on all domain crates)
+# 4. ws-server (depends on cycle-engine)
+
+# ============================================================================
+# Version Bump Defaults
+# ============================================================================
+
+# Default to patch version bump
+# Can be overridden with: cargo release minor/major
+consolidate-commits = true
+consolidate-pushes = true
+
+# ============================================================================
+# Dry Run Settings
+# ============================================================================
+
+# Use --no-publish for testing without publishing
+# cargo release --dry-run patch

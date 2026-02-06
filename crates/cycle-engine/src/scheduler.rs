@@ -251,8 +251,28 @@ impl CycleScheduler {
 ///
 /// Creates shared `InMemoryEventBus` and `LivingProtocolConfig`, then constructs
 /// each phase handler with its corresponding primitive engine wired in.
+///
+/// # Plugin Support
+///
+/// ```rust,ignore
+/// let engine = CycleEngineBuilder::new()
+///     .with_plugin(Box::new(LoggingPlugin::new()), PluginConfig::enabled())
+///     .with_plugin(Box::new(MetricsExportPlugin::new()), PluginConfig::enabled())
+///     .build();
+/// ```
+///
+/// # Middleware Support
+///
+/// ```rust,ignore
+/// let (engine, middleware_chain) = CycleEngineBuilder::new()
+///     .with_middleware(LoggingMiddleware::new())
+///     .with_middleware(MetricsMiddleware::new())
+///     .build_with_middleware();
+/// ```
 pub struct CycleEngineBuilder {
     config: LivingProtocolConfig,
+    plugins: Vec<(Box<dyn crate::plugin::Plugin>, crate::plugin::PluginConfig)>,
+    middlewares: Vec<Box<dyn crate::middleware::Middleware>>,
 }
 
 impl CycleEngineBuilder {
@@ -262,6 +282,8 @@ impl CycleEngineBuilder {
         info!("Creating new CycleEngineBuilder");
         Self {
             config: LivingProtocolConfig::default(),
+            plugins: Vec::new(),
+            middlewares: Vec::new(),
         }
     }
 
@@ -280,9 +302,93 @@ impl CycleEngineBuilder {
         self
     }
 
+    /// Add a plugin to the engine.
+    ///
+    /// Plugins are loaded in the order they are added. Use `PluginConfig`
+    /// to control plugin behavior and priority.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use cycle_engine::plugin::{PluginConfig, PluginPriority};
+    ///
+    /// builder.with_plugin(
+    ///     Box::new(MyPlugin::new()),
+    ///     PluginConfig::enabled().with_priority(PluginPriority::High)
+    /// )
+    /// ```
+    pub fn with_plugin(
+        mut self,
+        plugin: Box<dyn crate::plugin::Plugin>,
+        config: crate::plugin::PluginConfig,
+    ) -> Self {
+        info!(plugin = plugin.name(), "Adding plugin to builder");
+        self.plugins.push((plugin, config));
+        self
+    }
+
+    /// Add a middleware to the chain.
+    ///
+    /// Middlewares are executed in the order they are added.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// builder.with_middleware(LoggingMiddleware::new())
+    ///        .with_middleware(MetricsMiddleware::new())
+    /// ```
+    pub fn with_middleware(mut self, middleware: impl crate::middleware::Middleware + 'static) -> Self {
+        info!(middleware = middleware.name(), "Adding middleware to builder");
+        self.middlewares.push(Box::new(middleware));
+        self
+    }
+
     /// Build the engine with all phase handlers wired to their primitive engines.
     #[instrument(skip(self), name = "cycle_engine_build")]
     pub fn build(self) -> MetabolismCycleEngine {
+        let (engine, _) = self.build_with_components();
+        engine
+    }
+
+    /// Build the engine along with the plugin manager.
+    ///
+    /// Returns a tuple of (engine, plugin_manager) for cases where you need
+    /// direct access to the plugin manager.
+    pub fn build_with_plugins(self) -> (MetabolismCycleEngine, crate::plugin::PluginManager) {
+        let (engine, plugin_manager, _) = self.build_all();
+        (engine, plugin_manager)
+    }
+
+    /// Build the engine along with the middleware chain.
+    ///
+    /// Returns a tuple of (engine, middleware_chain) for cases where you need
+    /// to use the middleware chain for RPC processing.
+    pub fn build_with_middleware(self) -> (MetabolismCycleEngine, crate::middleware::MiddlewareChain) {
+        let (engine, _, middleware_chain) = self.build_all();
+        (engine, middleware_chain)
+    }
+
+    /// Build the engine with all components.
+    ///
+    /// Returns a tuple of (engine, plugin_manager, middleware_chain).
+    pub fn build_all(
+        self,
+    ) -> (
+        MetabolismCycleEngine,
+        crate::plugin::PluginManager,
+        crate::middleware::MiddlewareChain,
+    ) {
+        let (engine, (plugin_manager, middleware_chain)) = self.build_with_components();
+        (engine, plugin_manager, middleware_chain)
+    }
+
+    /// Internal build method that returns all components.
+    fn build_with_components(
+        self,
+    ) -> (
+        MetabolismCycleEngine,
+        (crate::plugin::PluginManager, crate::middleware::MiddlewareChain),
+    ) {
         use crate::phase_handlers::*;
         use living_core::CyclePhase;
 
@@ -352,8 +458,27 @@ impl CycleEngineBuilder {
             )),
         );
 
-        info!("Cycle engine built with all phase handlers registered");
-        engine
+        // Initialize plugin manager and load plugins
+        let mut plugin_manager = crate::plugin::PluginManager::new();
+        for (plugin, config) in self.plugins {
+            if let Err(e) = plugin_manager.load_plugin(plugin, config) {
+                error!(error = %e, "Failed to load plugin");
+            }
+        }
+
+        // Build middleware chain
+        let mut middleware_chain = crate::middleware::MiddlewareChain::new();
+        for middleware in self.middlewares {
+            middleware_chain.add_arc(std::sync::Arc::from(middleware));
+        }
+
+        info!(
+            plugins = plugin_manager.loaded_plugins().len(),
+            middlewares = middleware_chain.len(),
+            "Cycle engine built with all phase handlers, plugins, and middlewares"
+        );
+
+        (engine, (plugin_manager, middleware_chain))
     }
 }
 

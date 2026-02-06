@@ -1,0 +1,23 @@
+[plugin]
+name = "logging"
+version = "0.1.0"
+description = "Detailed phase transition logging plugin for the Metabolism Cycle Engine"
+authors = ["Mycelix Team"]
+license = "MIT OR Apache-2.0"
+library = "cycle_plugin_logging"
+entry_point = "create_plugin"
+
+[config]
+enabled = true
+
+[config.settings]
+# Log level: "trace", "debug", "info", "warn", "error"
+log_level = "info"
+# Whether to log phase metrics
+log_metrics = true
+# Whether to log event details
+log_events = true
+# Whether to include timestamps in log output
+include_timestamps = true
+# Output format: "text" or "json"
+output_format = "text"

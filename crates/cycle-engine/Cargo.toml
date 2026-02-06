@@ -4,6 +4,15 @@ description = "Metabolism Cycle State Machine orchestrator for the Living Protoc
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+publish = true
 
 [dependencies]
 living-core = { workspace = true }
@@ -19,6 +28,7 @@ thiserror = { workspace = true }
 uuid = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+toml = "0.8"
 
 # Optional telemetry dependencies
 tracing-opentelemetry = { version = "0.28", optional = true }
@@ -26,6 +36,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = tr
 opentelemetry = { version = "0.27", optional = true }
 opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"], optional = true }
 opentelemetry-otlp = { version = "0.27", features = ["tonic"], optional = true }
+
+# Optional dynamic plugin loading
+libloading = { version = "0.8", optional = true }
 
 [features]
 default = []
@@ -39,6 +52,7 @@ telemetry = [
     "dep:opentelemetry_sdk",
     "dep:opentelemetry-otlp",
 ]
+dynamic-plugins = ["dep:libloading"]
 
 [dev-dependencies]
 proptest = { workspace = true }

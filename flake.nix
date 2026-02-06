@@ -38,6 +38,12 @@
             # Solidity / Foundry
             foundry-bin
 
+            # Formal Verification
+            (python311.withPackages (ps: with ps; [
+              # Halmos for symbolic execution
+              # Note: halmos may need to be installed via pip if not in nixpkgs
+            ]))
+
             # Holochain (if available)
             # holochain.packages.${system}.holochain
             # holochain.packages.${system}.hc
@@ -46,6 +52,7 @@
             git
             jq
             yq-go
+            curl
 
             # For criterion benchmarks
             gnuplot
@@ -56,10 +63,14 @@
             echo "======================================================"
             echo ""
             echo "Available commands:"
-            echo "  cargo test --workspace --features full  - Run all tests"
-            echo "  cargo bench --features full             - Run benchmarks"
-            echo "  forge test                              - Run Solidity tests"
-            echo "  ./scripts/mycelix-cli.sh help           - CLI tool help"
+            echo "  cargo test --workspace             - Run all Rust tests"
+            echo "  cargo run -p ws-server             - Start WebSocket RPC server"
+            echo "  cd sdk/typescript && npm test      - Run TypeScript SDK tests"
+            echo ""
+            echo "Solidity / Formal Verification:"
+            echo "  forge test --fuzz-runs 10000       - Run Solidity fuzz tests"
+            echo "  forge test --match-path 'test/halmos/*' - Run Halmos invariant tests"
+            echo "  pip install halmos && halmos --contract WoundEscrow - Symbolic execution"
             echo ""
             echo "Rust: $(rustc --version)"
             echo "Node: $(node --version)"

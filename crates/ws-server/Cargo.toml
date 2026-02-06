@@ -7,6 +7,10 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[[bin]]
+name = "mycelix-ws-server"
+path = "src/main.rs"
+
 [dependencies]
 # Internal crates
 living-core = { workspace = true }
@@ -26,6 +30,10 @@ chrono = { workspace = true }
 
 # Logging
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
 
 # Error handling
 thiserror = { workspace = true }
@@ -33,3 +41,8 @@ anyhow = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
+
+# For integration tests
+[[test]]
+name = "e2e"
+path = "tests/e2e.rs"

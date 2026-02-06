@@ -2,10 +2,13 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
 use serde_json::Value;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, RwLock};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
@@ -19,8 +22,10 @@ use crate::rpc::{RpcError, RpcRequest, RpcResponse};
 /// Server configuration.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
-    /// Address to bind to
+    /// Address to bind to for WebSocket
     pub bind_addr: SocketAddr,
+    /// Address to bind to for health/metrics HTTP
+    pub health_addr: Option<SocketAddr>,
     /// Broadcast channel capacity for events
     pub broadcast_capacity: usize,
 }
@@ -29,9 +34,21 @@ impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             bind_addr: "127.0.0.1:8888".parse().unwrap(),
+            health_addr: Some("127.0.0.1:8889".parse().unwrap()),
             broadcast_capacity: 1024,
         }
     }
+}
+
+/// Server metrics for observability.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerMetrics {
+    pub active_connections: u64,
+    pub total_connections: u64,
+    pub messages_received: u64,
+    pub messages_sent: u64,
+    pub uptime_seconds: u64,
 }
 
 /// Cycle state for RPC responses (serializable version).
@@ -56,11 +73,22 @@ pub struct PhaseTransitionResponse {
     pub transitioned_at: String,
 }
 
+/// Atomic metrics counters.
+#[derive(Debug, Default)]
+pub struct AtomicMetrics {
+    pub active_connections: AtomicU64,
+    pub total_connections: AtomicU64,
+    pub messages_received: AtomicU64,
+    pub messages_sent: AtomicU64,
+}
+
 /// WebSocket RPC server for the Living Protocol.
 pub struct WebSocketServer {
     config: ServerConfig,
     engine: Arc<RwLock<MetabolismCycleEngine>>,
     event_tx: broadcast::Sender<String>,
+    metrics: Arc<AtomicMetrics>,
+    start_time: Instant,
 }
 
 impl WebSocketServer {
@@ -73,6 +101,8 @@ impl WebSocketServer {
             config,
             engine: Arc::new(RwLock::new(engine)),
             event_tx,
+            metrics: Arc::new(AtomicMetrics::default()),
+            start_time: Instant::now(),
         }
     }
 
@@ -84,6 +114,19 @@ impl WebSocketServer {
             config,
             engine: Arc::new(RwLock::new(engine)),
             event_tx,
+            metrics: Arc::new(AtomicMetrics::default()),
+            start_time: Instant::now(),
+        }
+    }
+
+    /// Get current server metrics.
+    pub fn get_metrics(&self) -> ServerMetrics {
+        ServerMetrics {
+            active_connections: self.metrics.active_connections.load(Ordering::Relaxed),
+            total_connections: self.metrics.total_connections.load(Ordering::Relaxed),
+            messages_received: self.metrics.messages_received.load(Ordering::Relaxed),
+            messages_sent: self.metrics.messages_sent.load(Ordering::Relaxed),
+            uptime_seconds: self.start_time.elapsed().as_secs(),
         }
     }
 
@@ -91,6 +134,18 @@ impl WebSocketServer {
     pub async fn run(&self) -> anyhow::Result<()> {
         let listener = TcpListener::bind(&self.config.bind_addr).await?;
         info!("WebSocket server listening on {}", self.config.bind_addr);
+
+        // Start health/metrics HTTP server if configured
+        if let Some(health_addr) = self.config.health_addr {
+            let metrics = Arc::clone(&self.metrics);
+            let engine = Arc::clone(&self.engine);
+            tokio::spawn(async move {
+                if let Err(e) = Self::run_health_server(health_addr, metrics, engine).await {
+                    error!("Health server error: {}", e);
+                }
+            });
+            info!("Health/metrics server listening on {}", health_addr);
+        }
 
         // Start the cycle engine
         {
@@ -106,21 +161,125 @@ impl WebSocketServer {
             Self::tick_loop(engine_clone, event_tx_clone).await;
         });
 
-        // Accept connections
-        while let Ok((stream, addr)) = listener.accept().await {
-            info!("New connection from {}", addr);
+        // Accept connections with graceful shutdown support
+        loop {
+            tokio::select! {
+                accept_result = listener.accept() => {
+                    match accept_result {
+                        Ok((stream, addr)) => {
+                            info!("New connection from {}", addr);
 
-            let engine = Arc::clone(&self.engine);
-            let event_rx = self.event_tx.subscribe();
+                            self.metrics.total_connections.fetch_add(1, Ordering::Relaxed);
+                            self.metrics.active_connections.fetch_add(1, Ordering::Relaxed);
 
-            tokio::spawn(async move {
-                if let Err(e) = Self::handle_connection(stream, addr, engine, event_rx).await {
-                    error!("Connection error from {}: {}", addr, e);
+                            let engine = Arc::clone(&self.engine);
+                            let event_rx = self.event_tx.subscribe();
+                            let metrics = Arc::clone(&self.metrics);
+
+                            tokio::spawn(async move {
+                                if let Err(e) = Self::handle_connection_with_metrics(
+                                    stream, addr, engine, event_rx, metrics
+                                ).await {
+                                    error!("Connection error from {}: {}", addr, e);
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            error!("Accept error: {}", e);
+                        }
+                    }
                 }
-            });
+                _ = tokio::signal::ctrl_c() => {
+                    info!("Shutdown signal received, gracefully shutting down...");
+                    break;
+                }
+            }
         }
 
+        // Graceful shutdown: wait for connections to drain
+        info!("Waiting for active connections to close...");
+        let mut wait_count = 0;
+        while self.metrics.active_connections.load(Ordering::Relaxed) > 0 && wait_count < 30 {
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            wait_count += 1;
+            info!(
+                "Active connections: {}",
+                self.metrics.active_connections.load(Ordering::Relaxed)
+            );
+        }
+
+        info!("Server shutdown complete");
         Ok(())
+    }
+
+    /// Run the health/metrics HTTP server.
+    async fn run_health_server(
+        addr: SocketAddr,
+        metrics: Arc<AtomicMetrics>,
+        engine: Arc<RwLock<MetabolismCycleEngine>>,
+    ) -> anyhow::Result<()> {
+        let listener = TcpListener::bind(addr).await?;
+
+        loop {
+            let (mut stream, _) = listener.accept().await?;
+            let metrics = Arc::clone(&metrics);
+            let engine = Arc::clone(&engine);
+
+            tokio::spawn(async move {
+                let mut buf = [0u8; 1024];
+                if stream.read(&mut buf).await.is_err() {
+                    return;
+                }
+
+                let request = String::from_utf8_lossy(&buf);
+                let (status, body) = if request.starts_with("GET /health") {
+                    ("200 OK", r#"{"status":"healthy"}"#.to_string())
+                } else if request.starts_with("GET /metrics") {
+                    let m = ServerMetrics {
+                        active_connections: metrics.active_connections.load(Ordering::Relaxed),
+                        total_connections: metrics.total_connections.load(Ordering::Relaxed),
+                        messages_received: metrics.messages_received.load(Ordering::Relaxed),
+                        messages_sent: metrics.messages_sent.load(Ordering::Relaxed),
+                        uptime_seconds: 0, // Can't easily get this here
+                    };
+                    ("200 OK", serde_json::to_string(&m).unwrap_or_default())
+                } else if request.starts_with("GET /state") {
+                    let engine = engine.read().await;
+                    let state = CycleStateResponse {
+                        cycle_number: engine.cycle_number(),
+                        current_phase: engine.current_phase(),
+                        phase_started: engine.phase_started().to_rfc3339(),
+                        cycle_started: engine.cycle_started().to_rfc3339(),
+                        phase_day: engine.phase_day(),
+                    };
+                    ("200 OK", serde_json::to_string(&state).unwrap_or_default())
+                } else {
+                    ("404 Not Found", r#"{"error":"not found"}"#.to_string())
+                };
+
+                let response = format!(
+                    "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    status,
+                    body.len(),
+                    body
+                );
+
+                let _ = stream.write_all(response.as_bytes()).await;
+            });
+        }
+    }
+
+    /// Handle connection with metrics tracking.
+    async fn handle_connection_with_metrics(
+        stream: TcpStream,
+        addr: SocketAddr,
+        engine: Arc<RwLock<MetabolismCycleEngine>>,
+        event_rx: broadcast::Receiver<String>,
+        metrics: Arc<AtomicMetrics>,
+    ) -> anyhow::Result<()> {
+        let result = Self::handle_connection(stream, addr, engine, event_rx).await;
+        metrics.active_connections.fetch_sub(1, Ordering::Relaxed);
+        result
     }
 
     /// Tick loop to drive the cycle engine.

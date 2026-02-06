@@ -7,7 +7,9 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "build": "tsc",
-    "test": "jest",
+    "test": "jest --testPathIgnorePatterns=integration",
+    "test:integration": "jest tests/integration.test.ts --testTimeout=30000",
+    "test:all": "jest --testTimeout=30000",
     "lint": "eslint src/"
   },
   "dependencies": {

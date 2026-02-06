@@ -50,11 +50,48 @@ npm install
 npm run build
 ```
 
+### Run the WebSocket Server
+
+```bash
+# Start with defaults (localhost:8888)
+cargo run -p ws-server
+
+# Custom host and port
+cargo run -p ws-server -- --host 0.0.0.0 --port 9000
+
+# With debug logging
+cargo run -p ws-server -- --log-level debug
+
+# With simulated time (for testing/development)
+cargo run -p ws-server -- --simulated-time --time-acceleration 100
+```
+
+The server exposes:
+- **WebSocket RPC** on port 8888 - JSON-RPC style API for querying cycle state
+- **Health/Metrics HTTP** on port 8889 - `/health`, `/metrics`, `/state` endpoints
+
+### Run with Docker
+
+```bash
+# Build and run
+docker build -t mycelix-ws-server .
+docker run -p 8888:8888 -p 8889:8889 mycelix-ws-server
+
+# Or use docker-compose
+docker-compose up -d
+
+# Development mode (100x time acceleration)
+docker-compose --profile dev up ws-server-dev
+```
+
 ### Run Tests
 
 ```bash
-# Run all Rust tests (426 tests)
+# Run all Rust tests
 cargo test --workspace --features full
+
+# Run WebSocket server E2E tests
+cargo test -p ws-server --test e2e
 
 # Run with specific feature tiers
 cargo test --workspace --features tier3-experimental
@@ -64,34 +101,43 @@ cargo test --workspace --features tier4-aspirational
 ### Using the TypeScript SDK
 
 ```typescript
-import {
-  MetabolismClient,
-  ConsciousnessClient,
-  CycleClient
-} from '@mycelix/living-protocol-sdk';
+import { LivingProtocolClient, CyclePhase } from '@mycelix/living-protocol-sdk';
 
-// Connect to Holochain
-const client = await AppAgentWebsocket.connect('ws://localhost:8888', 'mycelix');
-
-// Create a metabolism client
-const metabolism = new MetabolismClient(client, 'living_metabolism');
-
-// Start composting a failed proposal
-await metabolism.startComposting({
-  entityType: 'FailedProposal',
-  entityId: 'proposal-123',
-  reason: 'Quorum not reached'
+// Connect to WebSocket RPC server
+const client = await LivingProtocolClient.connect({
+  url: 'ws://localhost:8888',
 });
 
-// Create a wound from a protocol violation
-const wound = await metabolism.createWound({
-  severity: 'Moderate',
-  cause: 'Consensus violation',
-  escrowAmount: 1000
+// Query cycle state
+const state = await client.getCurrentState();
+console.log(`Cycle ${state.cycleNumber}, Phase: ${state.currentPhase}`);
+
+// Subscribe to phase transitions
+client.onPhaseChange((event) => {
+  console.log(`Phase changed: ${event.data.from} -> ${event.data.to}`);
 });
 
-// Advance through healing phases
-await metabolism.advanceWoundPhase(wound.id); // Hemostasis -> Inflammation
+// Check if operations are permitted
+const canVote = await client.isOperationPermitted('vote');
+
+// Get phase metrics
+const metrics = await client.getPhaseMetrics(CyclePhase.Shadow);
+
+// Clean disconnect
+client.disconnect();
+```
+
+#### Running SDK Tests
+
+```bash
+cd sdk/typescript
+
+# Run unit tests
+npm test
+
+# Run integration tests (requires running server)
+# First: cargo run -p ws-server -- --port 9999 --simulated-time
+npm run test:integration
 ```
 
 ## Architecture
@@ -115,7 +161,8 @@ crates/
 ├── epistemics/       # Shadow, Uncertainty, Silence, Beauty
 ├── relational/       # Entanglement, Attractors, Liminality
 ├── structural/       # Resonance, Fractals, Morphogenesis
-└── cycle-engine/     # 28-day cycle orchestration
+├── cycle-engine/     # 28-day cycle orchestration
+└── ws-server/        # WebSocket RPC server with health/metrics
 ```
 
 ### The 28-Day Metabolism Cycle
@@ -226,6 +273,39 @@ bridge::attach_beauty_score(proposal_hash, beauty_score).await?;
 See [INTEGRATION.md](./INTEGRATION.md) for detailed integration architecture.
 
 ## API Reference
+
+### WebSocket RPC Server
+
+The WebSocket server provides a JSON-RPC style API:
+
+**Request Format:**
+```json
+{ "id": "1", "method": "getCycleState", "params": {} }
+```
+
+**Response Format:**
+```json
+{ "id": "1", "result": { "cycleNumber": 1, "currentPhase": "Shadow", ... } }
+```
+
+**Available Methods:**
+
+| Method | Params | Description |
+|--------|--------|-------------|
+| `getCycleState` | - | Get full cycle state |
+| `getCurrentPhase` | - | Get current phase name |
+| `getCycleNumber` | - | Get current cycle number |
+| `getTransitionHistory` | - | Get phase transition history |
+| `getPhaseMetrics` | `{ "phase": "Shadow" }` | Get metrics for a phase |
+| `isOperationPermitted` | `{ "operation": "vote" }` | Check if operation is allowed |
+
+**Health/Metrics Endpoints (HTTP):**
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Health check (returns `{"status":"healthy"}`) |
+| `GET /metrics` | Server metrics (connections, messages, uptime) |
+| `GET /state` | Current cycle state |
 
 ### Metabolism Module
 

@@ -35,9 +35,17 @@ struct Args {
     #[arg(short = 'H', long, default_value = "127.0.0.1")]
     host: String,
 
-    /// Port to listen on
+    /// Port to listen on for WebSocket connections
     #[arg(short, long, default_value_t = 8888)]
     port: u16,
+
+    /// Port to listen on for health/metrics HTTP
+    #[arg(long, default_value_t = 8889)]
+    health_port: u16,
+
+    /// Disable health/metrics HTTP server
+    #[arg(long)]
+    no_health: bool,
 
     /// Log level (trace, debug, info, warn, error)
     #[arg(short, long, default_value = "info")]
@@ -83,8 +91,23 @@ async fn main() -> anyhow::Result<()> {
         .parse()
         .map_err(|e| anyhow::anyhow!("Invalid address: {}", e))?;
 
+    // Parse health address
+    let health_addr = if args.no_health {
+        None
+    } else {
+        Some(
+            format!("{}:{}", args.host, args.health_port)
+                .parse()
+                .map_err(|e| anyhow::anyhow!("Invalid health address: {}", e))?,
+        )
+    };
+
     info!("Starting Mycelix WebSocket RPC Server");
     info!("Binding to {}", bind_addr);
+
+    if let Some(addr) = &health_addr {
+        info!("Health/metrics endpoint at http://{}", addr);
+    }
 
     if args.simulated_time {
         info!(
@@ -96,6 +119,7 @@ async fn main() -> anyhow::Result<()> {
     // Create server config
     let config = ServerConfig {
         bind_addr,
+        health_addr,
         broadcast_capacity: 1024,
     };
 

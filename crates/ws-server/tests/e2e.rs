@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -36,6 +37,7 @@ async fn start_test_server() -> (SocketAddr, oneshot::Sender<()>) {
 
     let config = ServerConfig {
         bind_addr: addr,
+        health_addr: None, // Disable health server in tests
         broadcast_capacity: 64,
     };
 
@@ -305,4 +307,108 @@ async fn test_multiple_concurrent_requests() {
     assert!(ids.contains(&"a"));
     assert!(ids.contains(&"b"));
     assert!(ids.contains(&"c"));
+}
+
+/// Helper to start a server with health endpoint.
+async fn start_test_server_with_health() -> (SocketAddr, SocketAddr, oneshot::Sender<()>) {
+    let ws_port = get_available_port();
+    let health_port = get_available_port();
+    let ws_addr: SocketAddr = format!("127.0.0.1:{}", ws_port).parse().unwrap();
+    let health_addr: SocketAddr = format!("127.0.0.1:{}", health_port).parse().unwrap();
+
+    let config = ServerConfig {
+        bind_addr: ws_addr,
+        health_addr: Some(health_addr),
+        broadcast_capacity: 64,
+    };
+
+    let engine = cycle_engine::CycleEngineBuilder::new()
+        .with_simulated_time(1000.0)
+        .build();
+    let server = WebSocketServer::with_engine(config, engine);
+
+    let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
+
+    tokio::spawn(async move {
+        tokio::select! {
+            result = server.run() => {
+                if let Err(e) = result {
+                    eprintln!("Server error: {}", e);
+                }
+            }
+            _ = &mut shutdown_rx => {}
+        }
+    });
+
+    // Wait for both servers to be ready
+    for _ in 0..50 {
+        if TcpStream::connect(&ws_addr).await.is_ok()
+            && TcpStream::connect(&health_addr).await.is_ok()
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    (ws_addr, health_addr, shutdown_tx)
+}
+
+/// Helper to make an HTTP request and get response body.
+async fn http_get(addr: SocketAddr, path: &str) -> (String, String) {
+    let mut stream = TcpStream::connect(addr).await.expect("Failed to connect");
+    let request = format!("GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", path, addr);
+    stream.write_all(request.as_bytes()).await.expect("Failed to write");
+
+    let mut response = String::new();
+    stream.read_to_string(&mut response).await.expect("Failed to read");
+
+    // Parse status and body
+    let parts: Vec<&str> = response.splitn(2, "\r\n\r\n").collect();
+    let headers = parts[0];
+    let body = parts.get(1).unwrap_or(&"").to_string();
+    let status = headers.lines().next().unwrap_or("").to_string();
+
+    (status, body)
+}
+
+#[tokio::test]
+async fn test_health_endpoint() {
+    let (_ws_addr, health_addr, _shutdown) = start_test_server_with_health().await;
+
+    let (status, body) = http_get(health_addr, "/health").await;
+
+    assert!(status.contains("200 OK"), "Expected 200 OK, got: {}", status);
+    let response: Value = serde_json::from_str(&body).expect("Invalid JSON");
+    assert_eq!(response["status"], "healthy");
+}
+
+#[tokio::test]
+async fn test_metrics_endpoint() {
+    let (_ws_addr, health_addr, _shutdown) = start_test_server_with_health().await;
+
+    let (status, body) = http_get(health_addr, "/metrics").await;
+
+    assert!(status.contains("200 OK"), "Expected 200 OK, got: {}", status);
+    let response: Value = serde_json::from_str(&body).expect("Invalid JSON");
+
+    assert!(response.get("activeConnections").is_some());
+    assert!(response.get("totalConnections").is_some());
+    assert!(response.get("messagesReceived").is_some());
+    assert!(response.get("messagesSent").is_some());
+}
+
+#[tokio::test]
+async fn test_state_endpoint() {
+    let (_ws_addr, health_addr, _shutdown) = start_test_server_with_health().await;
+
+    let (status, body) = http_get(health_addr, "/state").await;
+
+    assert!(status.contains("200 OK"), "Expected 200 OK, got: {}", status);
+    let response: Value = serde_json::from_str(&body).expect("Invalid JSON");
+
+    assert!(response.get("cycleNumber").is_some());
+    assert!(response.get("currentPhase").is_some());
+    assert!(response.get("phaseStarted").is_some());
+    assert!(response.get("cycleStarted").is_some());
+    assert!(response.get("phaseDay").is_some());
 }

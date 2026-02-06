@@ -1,0 +1,217 @@
+# Default values for mycelix-ws-server Helm chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# -- Number of replicas
+replicaCount: 3
+
+image:
+  # -- Container image repository
+  repository: mycelix/ws-server
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag whose default is the chart appVersion
+  tag: ""
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full name
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Specifies whether a service account should be created
+  create: true
+  # -- Annotations to add to the service account
+  annotations: {}
+  # -- The name of the service account to use
+  name: ""
+
+# -- Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8889"
+  prometheus.io/path: "/metrics"
+
+# -- Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+# -- Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- WebSocket port
+  port: 8888
+  # -- Health/metrics port
+  healthPort: 8889
+
+ingress:
+  # -- Enable ingress
+  enabled: false
+  # -- Ingress class name
+  className: "nginx"
+  # -- Ingress annotations for WebSocket support
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/websocket-services: "mycelix-ws-server"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+  hosts:
+    - host: ws.mycelix.local
+      paths:
+        - path: /
+          pathType: Prefix
+  # -- TLS configuration
+  tls: []
+  #  - secretName: mycelix-ws-tls
+  #    hosts:
+  #      - ws.mycelix.local
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  # -- Enable Horizontal Pod Autoscaler
+  enabled: false
+  # -- Minimum replicas
+  minReplicas: 2
+  # -- Maximum replicas
+  maxReplicas: 10
+  # -- Target CPU utilization percentage
+  targetCPUUtilizationPercentage: 70
+  # -- Target memory utilization percentage
+  targetMemoryUtilizationPercentage: 80
+  # -- Target connections per pod (requires Prometheus Adapter)
+  targetConnectionsPerPod: 500
+
+# -- Node selector
+nodeSelector: {}
+
+# -- Tolerations
+tolerations: []
+
+# -- Affinity rules
+affinity: {}
+
+# -- Pod anti-affinity configuration
+podAntiAffinity:
+  # -- Enable pod anti-affinity to spread pods across nodes
+  enabled: true
+  # -- Type: preferred or required
+  type: preferred
+
+# Server configuration
+config:
+  # -- Log level (trace, debug, info, warn, error)
+  logLevel: "info"
+  # -- Rust log configuration
+  rustLog: "info,ws_server=info,cycle_engine=info,living_core=info"
+  # -- Broadcast channel capacity
+  broadcastCapacity: "1024"
+  # -- Metrics enabled
+  metricsEnabled: "true"
+
+# Living Protocol cycle configuration
+cycle:
+  # -- Shadow phase duration in days
+  shadowDuration: 1
+  # -- Composting phase duration in days
+  compostingDuration: 1
+  # -- Liminal phase duration in days
+  liminalDuration: 1
+  # -- Negative Capability phase duration in days
+  negativeCapabilityDuration: 1
+  # -- Eros phase duration in days
+  erosDuration: 1
+  # -- Co-Creation phase duration in days
+  coCreationDuration: 1
+  # -- Beauty phase duration in days
+  beautyDuration: 1
+  # -- Emergent Personhood phase duration in days
+  emergentPersonhoodDuration: 1
+  # -- Kenosis phase duration in days
+  kenosisDuration: 1
+
+# Probes configuration
+probes:
+  liveness:
+    # -- Enable liveness probe
+    enabled: true
+    # -- Initial delay seconds
+    initialDelaySeconds: 10
+    # -- Period seconds
+    periodSeconds: 15
+    # -- Timeout seconds
+    timeoutSeconds: 5
+    # -- Failure threshold
+    failureThreshold: 3
+  readiness:
+    # -- Enable readiness probe
+    enabled: true
+    # -- Initial delay seconds
+    initialDelaySeconds: 5
+    # -- Period seconds
+    periodSeconds: 10
+    # -- Timeout seconds
+    timeoutSeconds: 3
+    # -- Failure threshold
+    failureThreshold: 3
+  startup:
+    # -- Enable startup probe
+    enabled: true
+    # -- Initial delay seconds
+    initialDelaySeconds: 3
+    # -- Period seconds
+    periodSeconds: 5
+    # -- Timeout seconds
+    timeoutSeconds: 3
+    # -- Failure threshold
+    failureThreshold: 10
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  # -- Enable PodDisruptionBudget
+  enabled: true
+  # -- Minimum available pods
+  minAvailable: 1
+  # -- Maximum unavailable pods (alternative to minAvailable)
+  # maxUnavailable: 1
+
+# ServiceMonitor for Prometheus Operator
+serviceMonitor:
+  # -- Enable ServiceMonitor
+  enabled: false
+  # -- Namespace where ServiceMonitor should be created
+  namespace: ""
+  # -- Labels to add to the ServiceMonitor
+  labels: {}
+  # -- Scrape interval
+  interval: 30s
+  # -- Scrape timeout
+  scrapeTimeout: 10s
+  # -- Metric relabeling configs
+  metricRelabelings: []
+  # -- Relabeling configs
+  relabelings: []

@@ -1,0 +1,39 @@
+# Mycelix WebSocket Server - ConfigMap
+# Configuration for log levels, ports, and runtime settings
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mycelix-ws-server-config
+  labels:
+    app: mycelix-ws-server
+    app.kubernetes.io/name: mycelix-ws-server
+    app.kubernetes.io/component: websocket
+    app.kubernetes.io/part-of: mycelix
+data:
+  # Logging configuration
+  log_level: "info"
+  rust_log: "info,ws_server=info,cycle_engine=info,living_core=info"
+
+  # Server configuration
+  host: "0.0.0.0"
+  port: "8888"
+  health_port: "8889"
+
+  # WebSocket configuration
+  broadcast_capacity: "1024"
+
+  # Cycle engine configuration (Living Protocol phases)
+  # Phase durations in days
+  shadow_duration: "1"
+  composting_duration: "1"
+  liminal_duration: "1"
+  negative_capability_duration: "1"
+  eros_duration: "1"
+  co_creation_duration: "1"
+  beauty_duration: "1"
+  emergent_personhood_duration: "1"
+  kenosis_duration: "1"
+
+  # Metrics configuration
+  metrics_enabled: "true"
+  metrics_path: "/metrics"

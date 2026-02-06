@@ -1,0 +1,90 @@
+===============================================================================
+  Mycelix WebSocket Server - Living Protocol
+===============================================================================
+
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named: {{ .Release.Name }}
+
+1. Get the application URL by running these commands:
+
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  WebSocket URL: ws://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- else if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "mycelix-ws-server.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo "WebSocket URL: ws://$NODE_IP:$NODE_PORT"
+{{- else if contains "LoadBalancer" .Values.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "mycelix-ws-server.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo "WebSocket URL: ws://$SERVICE_IP:{{ .Values.service.port }}"
+{{- else if contains "ClusterIP" .Values.service.type }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "mycelix-ws-server.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8888:$CONTAINER_PORT
+  echo "WebSocket URL: ws://127.0.0.1:8888"
+{{- end }}
+
+2. Check the health endpoint:
+{{- if contains "ClusterIP" .Values.service.type }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8889:{{ .Values.service.healthPort }}
+  curl http://127.0.0.1:8889/health
+{{- end }}
+
+3. View metrics (Prometheus format):
+{{- if contains "ClusterIP" .Values.service.type }}
+  curl http://127.0.0.1:8889/metrics
+{{- end }}
+
+4. Connect to the WebSocket server using wscat or a TypeScript client:
+   wscat -c ws://127.0.0.1:8888
+
+5. Example RPC calls:
+   Get current cycle state:
+     {"id":"1","method":"getCycleState","params":{}}
+
+   Get current phase:
+     {"id":"2","method":"getCurrentPhase","params":{}}
+
+   Get cycle number:
+     {"id":"3","method":"getCycleNumber","params":{}}
+
+   Get transition history:
+     {"id":"4","method":"getTransitionHistory","params":{}}
+
+   Check if operation is permitted:
+     {"id":"5","method":"isOperationPermitted","params":{"operation":"delete"}}
+
+6. Living Protocol Phases:
+   The server cycles through these 9 phases:
+   - Shadow: Acknowledging hidden aspects
+   - Composting: Transformation through breakdown
+   - Liminal: Threshold states and transitions
+   - NegativeCapability: Embracing uncertainty
+   - Eros: Creative and connective energy
+   - CoCreation: Collaborative emergence
+   - Beauty: Aesthetic appreciation
+   - EmergentPersonhood: Identity formation
+   - Kenosis: Self-emptying and renewal
+
+{{- if .Values.autoscaling.enabled }}
+
+7. Autoscaling is enabled:
+   - Min replicas: {{ .Values.autoscaling.minReplicas }}
+   - Max replicas: {{ .Values.autoscaling.maxReplicas }}
+   - Target CPU: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}%
+{{- end }}
+
+{{- if .Values.serviceMonitor.enabled }}
+
+8. ServiceMonitor is enabled for Prometheus Operator.
+   Metrics will be scraped automatically.
+{{- end }}
+
+===============================================================================
+For more information, visit: https://github.com/mycelix/mycelix-v6-living
+===============================================================================

@@ -83,3 +83,42 @@ codegen-units = 1
 [profile.dev]
 opt-level = 0
 debug = true
+
+# Benchmark profile - optimized but with debug info
+[profile.bench]
+opt-level = 3
+debug = true
+lto = false
+
+# ============================================================================
+# Root package for benchmarks
+# ============================================================================
+[package]
+name = "mycelix-benchmarks"
+version = "0.6.0"
+edition = "2021"
+publish = false
+
+# Benchmarks require criterion harness
+[[bench]]
+name = "cycle_engine"
+harness = false
+
+[[bench]]
+name = "ws_server"
+harness = false
+
+[dependencies]
+# Internal crates for benchmarks
+living-core = { path = "crates/living-core" }
+metabolism = { path = "crates/metabolism" }
+epistemics = { path = "crates/epistemics" }
+relational = { path = "crates/relational" }
+cycle-engine = { path = "crates/cycle-engine" }
+
+# Benchmark dependencies
+criterion = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }

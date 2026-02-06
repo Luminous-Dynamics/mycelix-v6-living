@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mycelix-ws-server.configMapName" . }}
+  labels:
+    {{- include "mycelix-ws-server.labels" . | nindent 4 }}
+data:
+  # Logging configuration
+  log_level: {{ .Values.config.logLevel | quote }}
+  rust_log: {{ .Values.config.rustLog | quote }}
+
+  # Server configuration
+  host: "0.0.0.0"
+  port: {{ .Values.service.port | quote }}
+  health_port: {{ .Values.service.healthPort | quote }}
+
+  # WebSocket configuration
+  broadcast_capacity: {{ .Values.config.broadcastCapacity | quote }}
+
+  # Cycle engine configuration (Living Protocol phases)
+  shadow_duration: {{ .Values.cycle.shadowDuration | quote }}
+  composting_duration: {{ .Values.cycle.compostingDuration | quote }}
+  liminal_duration: {{ .Values.cycle.liminalDuration | quote }}
+  negative_capability_duration: {{ .Values.cycle.negativeCapabilityDuration | quote }}
+  eros_duration: {{ .Values.cycle.erosDuration | quote }}
+  co_creation_duration: {{ .Values.cycle.coCreationDuration | quote }}
+  beauty_duration: {{ .Values.cycle.beautyDuration | quote }}
+  emergent_personhood_duration: {{ .Values.cycle.emergentPersonhoodDuration | quote }}
+  kenosis_duration: {{ .Values.cycle.kenosisDuration | quote }}
+
+  # Metrics configuration
+  metrics_enabled: {{ .Values.config.metricsEnabled | quote }}
+  metrics_path: "/metrics"

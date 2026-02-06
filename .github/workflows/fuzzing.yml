@@ -1,0 +1,310 @@
+# Fuzzing workflow for Mycelix v6.0 Living Protocol Layer
+#
+# Runs automated fuzzing on a weekly schedule and reports crashes as issues.
+#
+# ## Schedule
+# - Weekly on Sundays at midnight UTC
+# - Manual trigger via workflow_dispatch
+#
+# ## Duration
+# - Each target runs for 1 hour (3600 seconds)
+# - Total runtime: ~6 hours for all targets
+#
+# ## Crash Handling
+# - Crashes are uploaded as artifacts
+# - Issues are automatically created for new crashes
+
+name: Fuzzing
+
+on:
+  schedule:
+    # Weekly on Sunday at midnight UTC
+    - cron: '0 0 * * 0'
+
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Fuzzing duration per target (seconds)'
+        required: false
+        default: '3600'
+      targets:
+        description: 'Comma-separated list of targets (empty = all)'
+        required: false
+        default: ''
+
+env:
+  CARGO_TERM_COLOR: always
+  # Fuzzing duration in seconds (1 hour default)
+  FUZZ_DURATION: ${{ github.event.inputs.duration || '3600' }}
+
+jobs:
+  fuzz:
+    name: Fuzz ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - rpc_parse
+          - event_serialize
+          - cycle_state
+          - kvector_operations
+          - beauty_scoring
+          - wound_healing
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: nightly
+          components: llvm-tools-preview
+
+      - name: Install cargo-fuzz
+        run: cargo +nightly install cargo-fuzz
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-fuzz-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-fuzz-
+
+      - name: Restore corpus
+        uses: actions/cache@v4
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_number }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.target }}-
+
+      - name: Run fuzzer
+        id: fuzz
+        working-directory: fuzz
+        continue-on-error: true
+        run: |
+          mkdir -p corpus/${{ matrix.target }}
+          mkdir -p artifacts/${{ matrix.target }}
+
+          echo "Starting fuzzing of ${{ matrix.target }} for ${{ env.FUZZ_DURATION }} seconds..."
+
+          # Run fuzzer with timeout
+          timeout --preserve-status ${{ env.FUZZ_DURATION }}s \
+            cargo +nightly fuzz run ${{ matrix.target }} -- \
+              -max_len=8192 \
+              -max_total_time=${{ env.FUZZ_DURATION }} \
+              -print_final_stats=1 \
+              -artifact_prefix=artifacts/${{ matrix.target }}/ \
+              2>&1 | tee fuzz_output.log || true
+
+          # Check for crashes
+          if ls artifacts/${{ matrix.target }}/crash-* 1> /dev/null 2>&1; then
+            echo "CRASHES_FOUND=true" >> $GITHUB_OUTPUT
+            echo "Found crashes in ${{ matrix.target }}!"
+          else
+            echo "CRASHES_FOUND=false" >> $GITHUB_OUTPUT
+            echo "No crashes found in ${{ matrix.target }}"
+          fi
+
+      - name: Upload crash artifacts
+        if: steps.fuzz.outputs.CRASHES_FOUND == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: crashes-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/crash-*
+          retention-days: 30
+
+      - name: Upload fuzz log
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-log-${{ matrix.target }}
+          path: fuzz/fuzz_output.log
+          retention-days: 7
+
+      - name: Save corpus
+        uses: actions/cache/save@v4
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_number }}
+
+      - name: Create issue for crashes
+        if: steps.fuzz.outputs.CRASHES_FOUND == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const target = '${{ matrix.target }}';
+            const artifactDir = 'fuzz/artifacts/' + target;
+
+            // List crash files
+            let crashFiles = [];
+            try {
+              crashFiles = fs.readdirSync(artifactDir).filter(f => f.startsWith('crash-'));
+            } catch (e) {
+              console.log('No crash files found');
+              return;
+            }
+
+            if (crashFiles.length === 0) {
+              console.log('No crashes to report');
+              return;
+            }
+
+            // Create issue
+            const issueTitle = `[Fuzzing] Crash found in ${target}`;
+            const issueBody = `## Fuzzing Crash Report
+
+            **Target:** \`${target}\`
+            **Run:** [${context.runNumber}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            **Date:** ${new Date().toISOString()}
+
+            ### Crashes Found
+
+            ${crashFiles.map(f => `- \`${f}\``).join('\n')}
+
+            ### Reproduction
+
+            1. Download the crash artifacts from the workflow run
+            2. Reproduce with:
+               \`\`\`bash
+               cd fuzz
+               cargo +nightly fuzz run ${target} -- <crash-file>
+               \`\`\`
+
+            3. Minimize the crash:
+               \`\`\`bash
+               cargo +nightly fuzz tmin ${target} <crash-file>
+               \`\`\`
+
+            ### Labels
+
+            - security
+            - fuzzing
+            - ${target}
+            `;
+
+            // Check for existing open issues
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'fuzzing',
+              per_page: 100
+            });
+
+            const duplicateIssue = existingIssues.data.find(
+              issue => issue.title === issueTitle
+            );
+
+            if (duplicateIssue) {
+              console.log(`Issue already exists: #${duplicateIssue.number}`);
+              // Add comment about new crashes
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: duplicateIssue.number,
+                body: `New crashes found in run #${context.runNumber}:\n\n${crashFiles.map(f => `- \`${f}\``).join('\n')}`
+              });
+            } else {
+              // Create new issue
+              const newIssue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: issueTitle,
+                body: issueBody,
+                labels: ['security', 'fuzzing', 'bug']
+              });
+              console.log(`Created issue: #${newIssue.data.number}`);
+            }
+
+  # Summary job to report overall status
+  summary:
+    name: Fuzzing Summary
+    needs: fuzz
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check for crashes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId
+            });
+
+            const crashArtifacts = artifacts.data.artifacts.filter(
+              a => a.name.startsWith('crashes-')
+            );
+
+            if (crashArtifacts.length > 0) {
+              core.setFailed(
+                `Fuzzing found crashes in ${crashArtifacts.length} target(s): ` +
+                crashArtifacts.map(a => a.name.replace('crashes-', '')).join(', ')
+              );
+            } else {
+              console.log('No crashes found in any target');
+            }
+
+  # Optional: mutation testing as part of fuzzing workflow
+  mutation-testing:
+    name: Mutation Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants
+
+      - name: Run mutation testing
+        run: |
+          # Run on core crates with timeout
+          cargo mutants \
+            -p living-core \
+            -p metabolism \
+            -p consciousness \
+            -p epistemics \
+            --timeout 300 \
+            --jobs 2 \
+            -- --release 2>&1 | tee mutants_output.log || true
+
+      - name: Upload mutation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: |
+            mutants_output.log
+            mutants.out/
+          retention-days: 30
+
+      - name: Check mutation score
+        run: |
+          # Parse mutation score from output
+          if grep -q "mutation score:" mutants_output.log; then
+            SCORE=$(grep "mutation score:" mutants_output.log | tail -1 | grep -oP '\d+\.\d+')
+            echo "Mutation score: $SCORE%"
+
+            # Fail if score is below 80%
+            if (( $(echo "$SCORE < 80" | bc -l) )); then
+              echo "::warning::Mutation score $SCORE% is below 80% threshold"
+            fi
+          fi

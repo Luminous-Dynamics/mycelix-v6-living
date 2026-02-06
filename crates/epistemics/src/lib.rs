@@ -25,6 +25,9 @@ pub mod negative_capability;
 pub mod shadow_integration;
 pub mod silence_signal;
 
+#[cfg(test)]
+mod proptest_beauty;
+
 pub use beauty_validity::*;
 pub use negative_capability::*;
 pub use shadow_integration::*;

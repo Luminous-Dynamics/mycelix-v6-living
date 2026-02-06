@@ -1,0 +1,128 @@
+# OpenTelemetry Collector Configuration for Mycelix WebSocket Server
+#
+# This configuration receives traces via OTLP (gRPC and HTTP) and exports
+# them to various backends (Jaeger, Zipkin, OTLP).
+#
+# Usage:
+#   docker run -v $(pwd)/otel-collector.yaml:/etc/otelcol/config.yaml \
+#     otel/opentelemetry-collector-contrib:latest
+#
+# Or with docker-compose (see docker-compose.yaml)
+
+receivers:
+  # OTLP receiver for gRPC (default port 4317)
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Prometheus receiver for scraping metrics
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'mycelix-ws-server'
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['host.docker.internal:8889']
+
+processors:
+  # Batch processor for efficient export
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Resource processor to add service metadata
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: development
+        action: upsert
+      - key: service.namespace
+        value: mycelix
+        action: upsert
+
+  # Attributes processor to enrich spans
+  attributes:
+    actions:
+      - key: mycelix.version
+        value: "0.6.0"
+        action: upsert
+
+exporters:
+  # Debug exporter for development (logs to console)
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+  # OTLP exporter for forwarding to another collector or backend
+  otlp:
+    endpoint: "localhost:4319"
+    tls:
+      insecure: true
+
+  # Jaeger exporter (Thrift over HTTP)
+  # Requires Jaeger to be running with collector port 14268
+  jaeger:
+    endpoint: "http://jaeger:14268/api/traces"
+
+  # Zipkin exporter
+  # Requires Zipkin to be running on port 9411
+  zipkin:
+    endpoint: "http://zipkin:9411/api/v2/spans"
+
+  # Prometheus exporter for metrics
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: mycelix
+    const_labels:
+      service: ws-server
+
+extensions:
+  # Health check extension
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  # Performance profiler
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+  # zPages for debugging
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, pprof, zpages]
+
+  pipelines:
+    # Traces pipeline
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource, attributes]
+      exporters: [debug, jaeger]
+
+    # Metrics pipeline
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch, resource]
+      exporters: [debug, prometheus]
+
+    # Logs pipeline (if using OTLP logs)
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [debug]
+
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: 0.0.0.0:8888

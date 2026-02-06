@@ -1,0 +1,157 @@
+# cargo-mutants configuration for Mycelix v6.0 Living Protocol Layer
+#
+# This file configures mutation testing to verify test suite effectiveness.
+#
+# ## Usage
+#
+# Install cargo-mutants:
+# ```bash
+# cargo install cargo-mutants
+# ```
+#
+# Run mutation testing:
+# ```bash
+# cargo mutants --timeout 300
+# ```
+#
+# Run with specific packages:
+# ```bash
+# cargo mutants -p cycle-engine -p metabolism --timeout 300
+# ```
+#
+# ## Mutation Score Target
+#
+# We target a minimum mutation score of 80%. This means at least 80% of
+# generated mutants should be killed by the test suite.
+
+# ============================================================================
+# General Configuration
+# ============================================================================
+
+# Build timeout in seconds (5 minutes)
+build_timeout = 300
+
+# Test timeout in seconds (5 minutes)
+timeout = 300
+
+# Number of parallel jobs (0 = auto-detect)
+jobs = 0
+
+# Baseline: run tests first to ensure they pass
+baseline = "run"
+
+# ============================================================================
+# Packages to Test
+# ============================================================================
+
+# Only test these packages (comment out to test all)
+# These are the core Living Protocol crates
+# packages = ["cycle-engine", "metabolism", "consciousness", "epistemics", "living-core"]
+
+# ============================================================================
+# Source Files to Mutate
+# ============================================================================
+
+# Files/patterns to include in mutation testing
+examine_globs = [
+    "crates/cycle-engine/src/*.rs",
+    "crates/metabolism/src/*.rs",
+    "crates/consciousness/src/*.rs",
+    "crates/epistemics/src/*.rs",
+    "crates/living-core/src/*.rs",
+    "crates/relational/src/*.rs",
+    "crates/structural/src/*.rs",
+]
+
+# Files/patterns to exclude from mutation testing
+exclude_globs = [
+    # Test files
+    "**/tests/**",
+    "**/*_test.rs",
+    "**/test_*.rs",
+    "**/fuzz.rs",
+    "**/proptest_*.rs",
+
+    # Generated code
+    "**/build.rs",
+
+    # Configuration
+    "**/config.rs",
+
+    # External dependencies
+    "lib/**",
+    "zomes/**",
+
+    # Documentation and examples
+    "**/examples/**",
+    "**/benches/**",
+]
+
+# ============================================================================
+# Functions to Exclude
+# ============================================================================
+
+# Functions that are difficult to test or test-only code
+exclude_re = [
+    # Debug/display implementations
+    "impl.*Debug",
+    "impl.*Display",
+    "impl.*Default",
+
+    # Serialization (covered by proptest)
+    "impl.*Serialize",
+    "impl.*Deserialize",
+
+    # Test utilities
+    "make_.*",
+    "test_.*",
+    "mock_.*",
+    "stub_.*",
+
+    # Logging/tracing
+    "tracing::.*",
+    "log::.*",
+    "info!",
+    "warn!",
+    "error!",
+    "debug!",
+
+    # Metric collection (side effects only)
+    "collect_metrics",
+    "record_.*_metric",
+]
+
+# ============================================================================
+# Mutation Operators
+# ============================================================================
+
+# Default mutation operators are used. These include:
+# - Replace binary operators (+, -, *, /, %, etc.)
+# - Replace comparison operators (==, !=, <, >, <=, >=)
+# - Replace logical operators (&&, ||, !)
+# - Replace return values (true/false, 0, empty containers)
+# - Delete statements and function calls
+
+# ============================================================================
+# Output Configuration
+# ============================================================================
+
+# Output format for CI integration
+# output = "json"
+
+# Directory for mutation reports
+# output_dir = "target/mutants"
+
+# ============================================================================
+# CI/Performance Settings
+# ============================================================================
+
+# Minimum mutation score threshold (80%)
+# Used by CI to fail if score is below this
+minimum_score = 0.80
+
+# Skip compilation for mutants that don't change any test dependencies
+leak_test = true
+
+# Use incremental compilation for faster iteration
+incremental = true

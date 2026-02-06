@@ -1,0 +1,43 @@
+# Mycelix WebSocket Server - Kubernetes Service
+# ClusterIP service for internal access within the cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: mycelix-ws-server
+  labels:
+    app: mycelix-ws-server
+    app.kubernetes.io/name: mycelix-ws-server
+    app.kubernetes.io/component: websocket
+    app.kubernetes.io/part-of: mycelix
+spec:
+  type: ClusterIP
+  selector:
+    app: mycelix-ws-server
+  ports:
+    - name: websocket
+      port: 8888
+      targetPort: websocket
+      protocol: TCP
+    - name: health
+      port: 8889
+      targetPort: health
+      protocol: TCP
+---
+# Headless service for StatefulSet-like direct pod addressing (optional)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mycelix-ws-server-headless
+  labels:
+    app: mycelix-ws-server
+    app.kubernetes.io/name: mycelix-ws-server
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: mycelix-ws-server
+  ports:
+    - name: websocket
+      port: 8888
+      targetPort: websocket
+      protocol: TCP

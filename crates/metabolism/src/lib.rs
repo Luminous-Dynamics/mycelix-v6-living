@@ -26,6 +26,9 @@ pub mod kenosis;
 pub mod metabolic_trust;
 pub mod wound_healing;
 
+#[cfg(test)]
+mod proptest_wound;
+
 pub use composting::CompostingEngine;
 pub use kenosis::KenosisEngine;
 pub use metabolic_trust::MetabolicTrustEngine;

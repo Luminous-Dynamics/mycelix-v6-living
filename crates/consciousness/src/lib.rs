@@ -30,6 +30,9 @@
 
 pub mod temporal_k_vector;
 
+#[cfg(test)]
+mod proptest_kvector;
+
 #[cfg(feature = "tier3-experimental")]
 pub mod field_interference;
 

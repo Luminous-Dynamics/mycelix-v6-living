@@ -1,0 +1,89 @@
+[package]
+name = "mycelix-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = "AGPL-3.0-or-later"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+# Fuzzing framework
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+# Serialization for fuzzing
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Internal crates to fuzz
+living-core = { path = "../crates/living-core" }
+cycle-engine = { path = "../crates/cycle-engine" }
+metabolism = { path = "../crates/metabolism" }
+consciousness = { path = "../crates/consciousness" }
+epistemics = { path = "../crates/epistemics" }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Optional: for RPC fuzzing
+# ws-server = { path = "../crates/ws-server" }
+
+[profile.release]
+debug = true
+opt-level = 3
+
+[profile.fuzz]
+inherits = "release"
+debug = true
+# Disable LTO for faster fuzzing builds
+lto = false
+# Single codegen unit for better coverage
+codegen-units = 1
+
+# ============================================================================
+# Fuzz Targets
+# ============================================================================
+
+[[bin]]
+name = "rpc_parse"
+path = "fuzz_targets/rpc_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "event_serialize"
+path = "fuzz_targets/event_serialize.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "cycle_state"
+path = "fuzz_targets/cycle_state.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "kvector_operations"
+path = "fuzz_targets/kvector_operations.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "beauty_scoring"
+path = "fuzz_targets/beauty_scoring.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "wound_healing"
+path = "fuzz_targets/wound_healing.rs"
+test = false
+doc = false
+bench = false

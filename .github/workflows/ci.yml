@@ -5,6 +5,11 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  schedule:
+    # Run soak tests weekly on Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    # Allow manual trigger for soak tests
 
 env:
   CARGO_TERM_COLOR: always
@@ -241,11 +246,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        run: cargo install cargo-audit --locked
 
-      - name: Run audit
-        run: cargo audit
-        continue-on-error: true  # Advisory-only
+      - name: Run security audit
+        run: cargo audit --deny warnings
+
+      - name: Check for unmaintained dependencies
+        run: cargo audit --deny unmaintained
+        continue-on-error: true  # Advisory - unmaintained deps may still be usable
 
   # ============================================================================
   # Documentation
@@ -267,3 +275,260 @@ jobs:
         with:
           name: documentation
           path: target/doc
+
+  # ============================================================================
+  # Benchmarks - runs on PRs to main
+  # ============================================================================
+  benchmarks:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    needs: rust-test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install critcmp
+        run: cargo install critcmp --locked || true
+
+      - name: Checkout base branch
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          git checkout origin/${{ github.base_ref }}
+
+      - name: Run baseline benchmarks
+        run: |
+          cargo bench --bench ws_server -- --save-baseline base --noplot || true
+          cargo bench --bench cycle_engine -- --save-baseline base --noplot || true
+
+      - name: Checkout PR branch
+        run: git checkout ${{ github.sha }}
+
+      - name: Run PR benchmarks
+        run: |
+          cargo bench --bench ws_server -- --save-baseline pr --noplot || true
+          cargo bench --bench cycle_engine -- --save-baseline pr --noplot || true
+
+      - name: Compare benchmarks
+        id: bench-compare
+        run: |
+          echo "## Benchmark Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### WebSocket Server Benchmarks" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          critcmp base pr 2>&1 | head -100 >> $GITHUB_STEP_SUMMARY || echo "No comparison available" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for regressions
+        run: |
+          # Parse criterion output for regressions > 10%
+          # This is a simplified check - criterion will output regression info
+          echo "Checking for performance regressions > 10%..."
+
+          # Count files indicating regression
+          REGRESSIONS=$(find target/criterion -name "change" -type d 2>/dev/null | while read dir; do
+            if [ -f "$dir/estimates.json" ]; then
+              CHANGE=$(jq -r '.mean.point_estimate // 0' "$dir/estimates.json" 2>/dev/null || echo "0")
+              # point_estimate is a ratio, > 0.10 means > 10% slower
+              if [ "$(echo "$CHANGE > 0.10" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
+                echo "regression"
+              fi
+            fi
+          done | wc -l)
+
+          if [ "$REGRESSIONS" -gt 0 ]; then
+            echo "::warning::Found $REGRESSIONS benchmarks with >10% regression"
+          else
+            echo "No significant regressions detected"
+          fi
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: target/criterion/
+          retention-days: 30
+
+  # ============================================================================
+  # Performance Tests - runs on pushes to main
+  # ============================================================================
+  performance:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: rust-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-perf-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release
+        run: cargo build -p ws-server --release
+
+      - name: Start server
+        run: |
+          ./target/release/mycelix-ws-server &
+          sleep 5
+          # Verify server is running
+          curl -s http://localhost:8889/health | grep -q healthy || exit 1
+
+      - name: Create results directory
+        run: mkdir -p tests/load/k6/results
+
+      - name: Run WebSocket load test (reduced for CI)
+        run: |
+          cd tests/load/k6
+          # Run a shorter test for CI (2 minutes with 100 VUs)
+          k6 run --duration 2m --vus 100 \
+            -e P99_THRESHOLD=200 \
+            websocket_load.js || true
+
+      - name: Run throughput test
+        run: |
+          cd tests/load/k6
+          k6 run --duration 1m \
+            -e ITERATIONS=5000 \
+            rpc_throughput.js || true
+
+      - name: Run connection churn test
+        run: |
+          cd tests/load/k6
+          k6 run --duration 1m \
+            -e CONN_RATE=25 \
+            connection_churn.js || true
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-results
+          path: tests/load/k6/results/
+          retention-days: 30
+
+      - name: Post results summary
+        run: |
+          echo "## Performance Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for f in tests/load/k6/results/*.json; do
+            if [ -f "$f" ]; then
+              echo "### $(basename $f .json)" >> $GITHUB_STEP_SUMMARY
+              echo '```json' >> $GITHUB_STEP_SUMMARY
+              cat "$f" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+  # ============================================================================
+  # Soak Test - runs weekly or manually
+  # ============================================================================
+  soak-test:
+    name: Soak Test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-soak-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release
+        run: cargo build -p ws-server --release
+
+      - name: Run soak test (1 hour)
+        run: |
+          cd tests/soak
+          chmod +x soak_test.sh
+          ./soak_test.sh --duration 1h --with-load --k6-vus 50
+        timeout-minutes: 75
+
+      - name: Analyze results
+        run: |
+          python3 tests/soak/analyze_soak.py \
+            --output soak_report.html \
+            tests/soak/soak_results/metrics_*.csv || true
+
+      - name: Upload soak test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-test-results
+          path: |
+            tests/soak/soak_results/
+            soak_report.html
+          retention-days: 90
+
+      - name: Check soak test passed
+        run: |
+          SUMMARY_FILE=$(ls tests/soak/soak_results/summary_*.json 2>/dev/null | head -1)
+          if [ -f "$SUMMARY_FILE" ]; then
+            PASSED=$(jq -r '.results.passed' "$SUMMARY_FILE")
+            if [ "$PASSED" != "true" ]; then
+              echo "::error::Soak test failed - potential memory leak detected"
+              cat "$SUMMARY_FILE"
+              exit 1
+            fi
+            echo "Soak test passed!"
+          else
+            echo "::warning::No summary file found"
+          fi

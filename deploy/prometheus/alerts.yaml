@@ -1,0 +1,317 @@
+# Prometheus Alert Rules for Mycelix WebSocket Server
+#
+# These rules define alerts for monitoring the health and performance
+# of the Mycelix WebSocket RPC server.
+#
+# Usage:
+#   Add to prometheus.yml under rule_files:
+#   rule_files:
+#     - /etc/prometheus/alerts.yaml
+
+groups:
+  - name: mycelix_ws_server
+    interval: 30s
+    rules:
+      # ============================================
+      # Error Rate Alerts
+      # ============================================
+
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(mycelix_ws_server_errors_total[5m])) /
+            sum(rate(mycelix_ws_server_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: mycelix-ws-server
+        annotations:
+          summary: "High error rate on Mycelix WebSocket server"
+          description: |
+            Error rate is {{ printf "%.2f" $value | mul 100 }}% over the last 5 minutes.
+            This indicates potential issues with request processing.
+          runbook_url: "https://docs.mycelix.io/runbooks/high-error-rate"
+
+      - alert: CriticalErrorRate
+        expr: |
+          (
+            sum(rate(mycelix_ws_server_errors_total[5m])) /
+            sum(rate(mycelix_ws_server_requests_total[5m]))
+          ) > 0.20
+        for: 2m
+        labels:
+          severity: critical
+          service: mycelix-ws-server
+        annotations:
+          summary: "Critical error rate on Mycelix WebSocket server"
+          description: |
+            Error rate is {{ printf "%.2f" $value | mul 100 }}% over the last 5 minutes.
+            Immediate investigation required.
+          runbook_url: "https://docs.mycelix.io/runbooks/critical-error-rate"
+
+      - alert: RpcMethodErrors
+        expr: |
+          sum by (method) (
+            rate(mycelix_ws_server_rpc_errors_total[5m])
+          ) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: mycelix-ws-server
+        annotations:
+          summary: "High RPC method error rate for {{ $labels.method }}"
+          description: |
+            The RPC method {{ $labels.method }} is experiencing {{ printf "%.1f" $value }} errors/sec.
+          runbook_url: "https://docs.mycelix.io/runbooks/rpc-method-errors"
+
+      # ============================================
+      # Connection Saturation Alerts
+      # ============================================
+
+      - alert: ConnectionSaturation
+        expr: |
+          mycelix_ws_server_active_connections /
+          mycelix_ws_server_max_connections > 0.80
+        for: 5m
+        labels:
+          severity: warning
+          service: mycelix-ws-server
+        annotations:
+          summary: "WebSocket connection saturation approaching limit"
+          description: |
+            Active connections are at {{ printf "%.1f" $value | mul 100 }}% of maximum capacity.
+            Consider scaling up or investigating connection leaks.
+          runbook_url: "https://docs.mycelix.io/runbooks/connection-saturation"
+
+      - alert: ConnectionSaturationCritical
+        expr: |
+          mycelix_ws_server_active_connections /
+          mycelix_ws_server_max_connections > 0.95
+        for: 2m
+        labels:
+          severity: critical
+          service: mycelix-ws-server
+        annotations:
+          summary: "WebSocket connections near maximum capacity"
+          description: |
+            Active connections are at {{ printf "%.1f" $value | mul 100 }}% of maximum.
+            New connections may be rejected.
+          runbook_url: "https://docs.mycelix.io/runbooks/connection-saturation-critical"
+
+      - alert: HighConnectionChurn
+        expr: |
+          rate(mycelix_ws_server_total_connections[5m]) > 100
+        for: 10m
+        labels:
+          severity: warning
+          service: mycelix-ws-server
+        annotations:
+          summary: "High WebSocket connection churn"
+          description: |
+            Connection rate is {{ printf "%.1f" $value }} new connections/sec.
+            This may indicate clients repeatedly reconnecting.
+          runbook_url: "https://docs.mycelix.io/runbooks/connection-churn"
+
+      - alert: NoActiveConnections
+        expr: |
+          mycelix_ws_server_active_connections == 0
+        for: 15m
+        labels:
+          severity: info
+          service: mycelix-ws-server
+        annotations:
+          summary: "No active WebSocket connections"
+          description: |
+            The server has had no active connections for 15 minutes.
+            This may be normal during low-traffic periods.
+
+      # ============================================
+      # Phase Stuck Alerts (Cycle Engine)
+      # ============================================
+
+      - alert: PhaseStuck
+        expr: |
+          time() - mycelix_cycle_engine_last_phase_transition_timestamp > 604800
+        for: 1h
+        labels:
+          severity: warning
+          service: mycelix-ws-server
+        annotations:
+          summary: "Cycle phase has not transitioned for over 7 days"
+          description: |
+            The current phase ({{ $labels.phase }}) has been active for
+            {{ printf "%.1f" ($value / 86400) }} days without transitioning.
+            Normal cycle phases last 3-7 days.
+          runbook_url: "https://docs.mycelix.io/runbooks/phase-stuck"
+
+      - alert: PhaseStuckCritical
+        expr: |
+          time() - mycelix_cycle_engine_last_phase_transition_timestamp > 1209600
+        for: 1h
+        labels:
+          severity: critical
+          service: mycelix-ws-server
+        annotations:
+          summary: "Cycle phase stuck for over 14 days"
+          description: |
+            The current phase ({{ $labels.phase }}) has been active for
+            {{ printf "%.1f" ($value / 86400) }} days.
+            This exceeds the maximum expected phase duration.
+            The cycle engine may be stalled.
+          runbook_url: "https://docs.mycelix.io/runbooks/phase-stuck-critical"
+
+      - alert: CycleEngineNotTicking
+        expr: |
+          increase(mycelix_cycle_engine_tick_total[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: mycelix-ws-server
+        annotations:
+          summary: "Cycle engine has stopped ticking"
+          description: |
+            The cycle engine has not processed any ticks in the last 5 minutes.
+            The engine may have crashed or be deadlocked.
+          runbook_url: "https://docs.mycelix.io/runbooks/engine-not-ticking"
+
+      # ============================================
+      # Performance Alerts
+      # ============================================
+
+      - alert: HighRequestLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, method) (
+              rate(mycelix_ws_server_request_duration_seconds_bucket[5m])
+            )
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          service: mycelix-ws-server
+        annotations:
+          summary: "High request latency for RPC method {{ $labels.method }}"
+          description: |
+            95th percentile latency for {{ $labels.method }} is {{ printf "%.2f" $value }}s.
+            Expected latency is under 1 second.
+          runbook_url: "https://docs.mycelix.io/runbooks/high-latency"
+
+      - alert: MessageBacklogGrowing
+        expr: |
+          rate(mycelix_ws_server_message_backlog[5m]) > 0 and
+          mycelix_ws_server_message_backlog > 100
+        for: 10m
+        labels:
+          severity: warning
+          service: mycelix-ws-server
+        annotations:
+          summary: "WebSocket message backlog is growing"
+          description: |
+            Message backlog is {{ $value }} and increasing.
+            Clients may be lagging behind event broadcasts.
+          runbook_url: "https://docs.mycelix.io/runbooks/message-backlog"
+
+      # ============================================
+      # Resource Alerts
+      # ============================================
+
+      - alert: HighMemoryUsage
+        expr: |
+          process_resident_memory_bytes{job="mycelix-ws-server"} > 1073741824
+        for: 10m
+        labels:
+          severity: warning
+          service: mycelix-ws-server
+        annotations:
+          summary: "High memory usage on Mycelix WebSocket server"
+          description: |
+            Memory usage is {{ printf "%.0f" ($value / 1048576) }}MB.
+            Consider investigating for memory leaks.
+          runbook_url: "https://docs.mycelix.io/runbooks/high-memory"
+
+      - alert: HighCpuUsage
+        expr: |
+          rate(process_cpu_seconds_total{job="mycelix-ws-server"}[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          service: mycelix-ws-server
+        annotations:
+          summary: "High CPU usage on Mycelix WebSocket server"
+          description: |
+            CPU usage is {{ printf "%.1f" ($value * 100) }}%.
+            The server may be overloaded.
+          runbook_url: "https://docs.mycelix.io/runbooks/high-cpu"
+
+      # ============================================
+      # Availability Alerts
+      # ============================================
+
+      - alert: ServerDown
+        expr: |
+          up{job="mycelix-ws-server"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: mycelix-ws-server
+        annotations:
+          summary: "Mycelix WebSocket server is down"
+          description: |
+            The server at {{ $labels.instance }} is not responding to health checks.
+            Immediate investigation required.
+          runbook_url: "https://docs.mycelix.io/runbooks/server-down"
+
+      - alert: HealthCheckFailing
+        expr: |
+          mycelix_ws_server_health_check_success == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: mycelix-ws-server
+        annotations:
+          summary: "Health check failing on Mycelix WebSocket server"
+          description: |
+            The health endpoint is returning unhealthy status.
+            The server may be in a degraded state.
+          runbook_url: "https://docs.mycelix.io/runbooks/health-check-failing"
+
+  # ============================================
+  # Recording Rules for Dashboard Queries
+  # ============================================
+  - name: mycelix_recording_rules
+    interval: 30s
+    rules:
+      - record: mycelix:ws_server:error_rate_5m
+        expr: |
+          sum(rate(mycelix_ws_server_errors_total[5m])) /
+          sum(rate(mycelix_ws_server_requests_total[5m]))
+
+      - record: mycelix:ws_server:connection_utilization
+        expr: |
+          mycelix_ws_server_active_connections /
+          mycelix_ws_server_max_connections
+
+      - record: mycelix:ws_server:request_latency_p95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (
+              rate(mycelix_ws_server_request_duration_seconds_bucket[5m])
+            )
+          )
+
+      - record: mycelix:ws_server:request_latency_p99
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (
+              rate(mycelix_ws_server_request_duration_seconds_bucket[5m])
+            )
+          )
+
+      - record: mycelix:cycle_engine:phase_duration_days
+        expr: |
+          (time() - mycelix_cycle_engine_last_phase_transition_timestamp) / 86400
+
+      - record: mycelix:ws_server:messages_per_second
+        expr: |
+          sum(rate(mycelix_ws_server_messages_total[1m]))

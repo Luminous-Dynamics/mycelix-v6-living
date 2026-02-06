@@ -1,0 +1,86 @@
+# Mycelix WebSocket Server - Kubernetes Ingress
+# Ingress with WebSocket support annotations for nginx and cloud load balancers
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mycelix-ws-server
+  labels:
+    app: mycelix-ws-server
+    app.kubernetes.io/name: mycelix-ws-server
+    app.kubernetes.io/component: websocket
+    app.kubernetes.io/part-of: mycelix
+  annotations:
+    # Nginx Ingress Controller annotations
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+    # WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: "mycelix-ws-server"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+    # Connection limits
+    nginx.ingress.kubernetes.io/limit-connections: "100"
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    # TLS settings
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # AWS ALB Controller annotations (alternative)
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-port: "8889"
+    # GKE Ingress annotations (alternative)
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - ws.mycelix.example.com
+      secretName: mycelix-ws-tls
+  rules:
+    - host: ws.mycelix.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mycelix-ws-server
+                port:
+                  name: websocket
+---
+# Alternative: Ingress for health/metrics endpoint (internal use)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mycelix-ws-server-metrics
+  labels:
+    app: mycelix-ws-server
+    app.kubernetes.io/name: mycelix-ws-server
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ws-metrics.mycelix.internal
+      http:
+        paths:
+          - path: /metrics
+            pathType: Prefix
+            backend:
+              service:
+                name: mycelix-ws-server
+                port:
+                  name: health
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: mycelix-ws-server
+                port:
+                  name: health

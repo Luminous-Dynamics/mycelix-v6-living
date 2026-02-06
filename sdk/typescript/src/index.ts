@@ -12,3 +12,8 @@ export * from './epistemics';
 export * from './relational';
 export * from './structural';
 export * from './cycle';
+
+// WebSocket transport and subscriptions
+export * from './transport';
+export * from './subscription';
+export * from './client';

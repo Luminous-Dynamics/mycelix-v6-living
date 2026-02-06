@@ -98,6 +98,10 @@ pub fn create_resonance_address(input: AddressInput) -> ExternResult<Record> {
 
 /// Resolve resonance addresses by pattern similarity. Returns all addresses
 /// whose cosine similarity to the query pattern exceeds the threshold.
+///
+/// Uses GetStrategy::Network to query the DHT for consistency across nodes.
+/// This is critical for multi-node deployments where links may not have
+/// propagated to the local node yet.
 #[hdk_extern]
 pub fn resolve_by_pattern(query: PatternQuery) -> ExternResult<Vec<Record>> {
     let agent = agent_info()?.agent_initial_pubkey;
@@ -106,7 +110,7 @@ pub fn resolve_by_pattern(query: PatternQuery) -> ExternResult<Vec<Record>> {
             zome_info()?.id,
             LinkType(LinkTypes::PatternToAddress as u8),
         )),
-        GetStrategy::Local,
+        GetStrategy::Network, // Network for multi-node consistency
     )?;
 
     let mut results: Vec<Record> = Vec::new();

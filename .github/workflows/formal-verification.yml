@@ -1,0 +1,131 @@
+name: Formal Verification
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'contracts/**'
+      - 'test/halmos/**'
+      - 'foundry.toml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'test/halmos/**'
+      - 'foundry.toml'
+  workflow_dispatch:
+
+env:
+  FOUNDRY_PROFILE: default
+
+jobs:
+  halmos-verification:
+    name: Halmos Symbolic Execution
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Halmos
+        run: |
+          pip install halmos
+          halmos --version
+
+      - name: Install dependencies
+        run: forge install
+
+      - name: Build contracts
+        run: forge build
+
+      - name: Run Halmos on WoundEscrow
+        run: |
+          halmos --contract WoundEscrowHalmosTest \
+            --solver-timeout-assertion 300 \
+            --solver-timeout-branching 30 \
+            --loop 10
+
+      - name: Run Halmos on KenosisBurn
+        run: |
+          halmos --contract KenosisBurnHalmosTest \
+            --solver-timeout-assertion 300 \
+            --solver-timeout-branching 30 \
+            --loop 10
+
+      - name: Run Halmos on FractalDAO
+        run: |
+          halmos --contract FractalDAOHalmosTest \
+            --solver-timeout-assertion 300 \
+            --solver-timeout-branching 30 \
+            --loop 10
+
+  fuzz-testing:
+    name: Extended Fuzz Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Install dependencies
+        run: forge install
+
+      - name: Run extended fuzz tests
+        run: forge test --fuzz-runs 10000 -vvv
+        env:
+          FOUNDRY_PROFILE: halmos
+
+  invariant-summary:
+    name: Verification Summary
+    runs-on: ubuntu-latest
+    needs: [halmos-verification, fuzz-testing]
+    if: always()
+
+    steps:
+      - name: Check verification results
+        run: |
+          echo "## Formal Verification Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.halmos-verification.result }}" == "success" ]; then
+            echo "- Halmos symbolic execution: PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Halmos symbolic execution: FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.fuzz-testing.result }}" == "success" ]; then
+            echo "- Extended fuzz testing (10,000 runs): PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Extended fuzz testing (10,000 runs): FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Verified Invariants" >> $GITHUB_STEP_SUMMARY
+          echo "- WoundEscrow: Phase forward-only, escrow conservation" >> $GITHUB_STEP_SUMMARY
+          echo "- KenosisBurn: 20% cap, irrevocability, burn permanence" >> $GITHUB_STEP_SUMMARY
+          echo "- FractalDAO: Structural identity preservation" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if verification failed
+        if: needs.halmos-verification.result != 'success' || needs.fuzz-testing.result != 'success'
+        run: exit 1

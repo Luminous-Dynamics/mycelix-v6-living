@@ -212,6 +212,10 @@ pub fn update_metabolic_trust(input: TrustInput) -> ExternResult<Record> {
 }
 
 /// Retrieve all wound records linked to the given agent.
+///
+/// Uses GetStrategy::Network to query the DHT for consistency across nodes.
+/// This is critical for multi-node deployments where links may not have
+/// propagated to the local node yet.
 #[hdk_extern]
 pub fn get_wounds_for_agent(agent: AgentPubKey) -> ExternResult<Vec<Record>> {
     let links = get_links(
@@ -219,7 +223,7 @@ pub fn get_wounds_for_agent(agent: AgentPubKey) -> ExternResult<Vec<Record>> {
             zome_info()?.id,
             LinkType(LinkTypes::AgentToWounds as u8),
         )),
-        GetStrategy::Local,
+        GetStrategy::Network, // Network for multi-node consistency
     )?;
 
     let mut records: Vec<Record> = Vec::new();

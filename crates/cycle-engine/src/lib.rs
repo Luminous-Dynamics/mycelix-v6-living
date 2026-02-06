@@ -29,6 +29,7 @@
 pub mod engine;
 pub mod phase_handlers;
 pub mod scheduler;
+pub mod chaos;
 
 /// OpenTelemetry observability integration.
 ///

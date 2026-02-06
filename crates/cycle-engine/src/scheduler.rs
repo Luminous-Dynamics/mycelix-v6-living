@@ -12,11 +12,43 @@ use crate::engine::MetabolismCycleEngine;
 #[cfg(feature = "telemetry")]
 use crate::telemetry::metrics;
 
+/// Cancellation token for graceful shutdown.
+#[derive(Clone)]
+pub struct CancellationToken {
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl CancellationToken {
+    /// Create a new cancellation token.
+    pub fn new() -> Self {
+        Self {
+            cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+
+    /// Cancel the token, signaling shutdown.
+    pub fn cancel(&self) {
+        self.cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Check if the token has been cancelled.
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl Default for CancellationToken {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Async scheduler that drives the metabolism cycle engine.
 pub struct CycleScheduler {
     engine: Arc<Mutex<MetabolismCycleEngine>>,
     tick_interval: std::time::Duration,
     event_callback: Option<Box<dyn Fn(Vec<LivingProtocolEvent>) + Send + Sync>>,
+    cancellation_token: CancellationToken,
 }
 
 impl CycleScheduler {
@@ -28,7 +60,19 @@ impl CycleScheduler {
             engine: Arc::new(Mutex::new(engine)),
             tick_interval: std::time::Duration::from_secs(tick_interval_secs),
             event_callback: None,
+            cancellation_token: CancellationToken::new(),
         }
+    }
+
+    /// Create a new scheduler with a custom cancellation token.
+    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation_token = token;
+        self
+    }
+
+    /// Get the cancellation token for external cancellation.
+    pub fn cancellation_token(&self) -> CancellationToken {
+        self.cancellation_token.clone()
     }
 
     /// Set a callback for events.
@@ -61,7 +105,23 @@ impl CycleScheduler {
         }
 
         loop {
+            // Check for cancellation before sleeping
+            if self.cancellation_token.is_cancelled() {
+                info!("Cancellation requested, initiating graceful shutdown");
+                let mut engine = self.engine.lock().await;
+                engine.stop();
+                break;
+            }
+
             tokio::time::sleep(self.tick_interval).await;
+
+            // Check again after sleep
+            if self.cancellation_token.is_cancelled() {
+                info!("Cancellation requested during sleep, initiating graceful shutdown");
+                let mut engine = self.engine.lock().await;
+                engine.stop();
+                break;
+            }
 
             let mut engine = self.engine.lock().await;
             if !engine.is_running() {
@@ -167,8 +227,23 @@ impl CycleScheduler {
     #[instrument(skip(self), name = "cycle_scheduler_stop")]
     pub async fn stop(&self) {
         info!("Stopping cycle scheduler");
+        self.cancellation_token.cancel();
         let mut engine = self.engine.lock().await;
         engine.stop();
+    }
+
+    /// Request graceful shutdown via cancellation token.
+    ///
+    /// This is the preferred way to stop the scheduler from another task,
+    /// as it allows the current tick to complete before stopping.
+    pub fn request_shutdown(&self) {
+        info!("Shutdown requested via cancellation token");
+        self.cancellation_token.cancel();
+    }
+
+    /// Check if shutdown has been requested.
+    pub fn is_shutdown_requested(&self) -> bool {
+        self.cancellation_token.is_cancelled()
     }
 }
 

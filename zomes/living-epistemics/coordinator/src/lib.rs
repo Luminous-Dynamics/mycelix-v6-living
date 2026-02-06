@@ -240,6 +240,10 @@ pub fn submit_beauty_score(input: BeautyInput) -> ExternResult<Record> {
 }
 
 /// Retrieve all beauty scores linked to a given proposal.
+///
+/// Uses GetStrategy::Network to query the DHT for consistency across nodes.
+/// This is critical for multi-node deployments where links may not have
+/// propagated to the local node yet.
 #[hdk_extern]
 pub fn get_beauty_scores(proposal_hash: ActionHash) -> ExternResult<Vec<Record>> {
     let links = get_links(
@@ -247,7 +251,7 @@ pub fn get_beauty_scores(proposal_hash: ActionHash) -> ExternResult<Vec<Record>>
             zome_info()?.id,
             LinkType(LinkTypes::ProposalToBeautyScores as u8),
         )),
-        GetStrategy::Local,
+        GetStrategy::Network, // Network for multi-node consistency
     )?;
 
     let mut records: Vec<Record> = Vec::new();

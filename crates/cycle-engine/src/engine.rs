@@ -306,17 +306,69 @@ impl MetabolismCycleEngine {
     }
 
     /// Get current time (respects simulated time configuration).
+    ///
+    /// Uses saturating arithmetic to prevent overflow in simulated time mode.
     fn current_time(&self) -> DateTime<Utc> {
         if self.config.cycle.simulated_time {
             // In simulated mode, time is accelerated
             let real_elapsed = Utc::now() - self.state.cycle_started;
-            let accelerated = Duration::milliseconds(
-                (real_elapsed.num_milliseconds() as f64 * self.config.cycle.time_acceleration)
-                    as i64,
+            let accel = self.config.cycle.time_acceleration;
+
+            // Saturating multiplication to prevent overflow
+            let ms = crate::chaos::saturating_time_acceleration(
+                real_elapsed.num_milliseconds(),
+                accel,
             );
-            self.state.cycle_started + accelerated
+            let accelerated = Duration::milliseconds(ms);
+
+            crate::chaos::saturating_add_duration(self.state.cycle_started, accelerated)
         } else {
             Utc::now()
+        }
+    }
+
+    /// Create a state checkpoint for transactional operations.
+    pub fn checkpoint(&self) -> crate::chaos::StateCheckpoint {
+        crate::chaos::StateCheckpoint::new(&self.state, self.cycle_events.clone())
+    }
+
+    /// Restore state from a checkpoint (rollback).
+    pub fn restore_from_checkpoint(&mut self, checkpoint: &crate::chaos::StateCheckpoint) {
+        self.state = checkpoint.cycle_state.clone();
+        self.cycle_events = checkpoint.events.clone();
+        info!(
+            cycle = self.state.cycle_number,
+            phase = ?self.state.current_phase,
+            "State restored from checkpoint"
+        );
+    }
+
+    /// Transactional phase transition with automatic rollback on failure.
+    ///
+    /// This wraps transition_to_next_phase with checkpoint/rollback semantics:
+    /// - Creates a checkpoint before the transition
+    /// - Attempts the transition
+    /// - On failure, restores state from checkpoint
+    /// - On success, commits the transition
+    pub fn transition_transactional(&mut self) -> LivingResult<Vec<LivingProtocolEvent>> {
+        if !self.running {
+            return Err(LivingProtocolError::CycleNotInitialized);
+        }
+
+        // Create checkpoint
+        let checkpoint = self.checkpoint();
+
+        // Attempt transition
+        match self.transition_to_next_phase() {
+            Ok(events) => {
+                // Success - checkpoint is discarded automatically
+                Ok(events)
+            }
+            Err(e) => {
+                // Failure - restore from checkpoint
+                self.restore_from_checkpoint(&checkpoint);
+                Err(e)
+            }
         }
     }
 }

@@ -197,6 +197,36 @@ impl MetabolismCycleEngine {
         &self.cycle_events
     }
 
+    /// Get when the current phase started.
+    pub fn phase_started(&self) -> DateTime<Utc> {
+        self.state.phase_started
+    }
+
+    /// Get when the current cycle started.
+    pub fn cycle_started(&self) -> DateTime<Utc> {
+        self.state.cycle_started
+    }
+
+    /// Get the current day within the phase (0-indexed).
+    pub fn phase_day(&self) -> u32 {
+        self.state.phase_day
+    }
+
+    /// Get metrics for a specific phase.
+    /// Returns placeholder metrics for now.
+    pub fn phase_metrics(&self, _phase: CyclePhase) -> PhaseMetrics {
+        PhaseMetrics {
+            active_agents: 0,
+            spectral_k: 0.0,
+            mean_metabolic_trust: 0.5,
+            active_wounds: 0,
+            composting_entities: 0,
+            liminal_entities: 0,
+            entangled_pairs: 0,
+            held_uncertainties: 0,
+        }
+    }
+
     /// Whether the engine is running.
     pub fn is_running(&self) -> bool {
         self.running

@@ -263,6 +263,11 @@ export class WebSocketTransport {
         // Connect will trigger another reconnect if needed
       });
     }, delay + jitter);
+
+    // Allow Node.js to exit even if reconnect is pending
+    if (this.reconnectTimer.unref) {
+      this.reconnectTimer.unref();
+    }
   }
 
   private stopReconnect(): void {
@@ -285,6 +290,11 @@ export class WebSocketTransport {
         }
       }
     }, this.config.heartbeatIntervalMs);
+
+    // Allow Node.js to exit even if heartbeat is active
+    if (this.heartbeatTimer.unref) {
+      this.heartbeatTimer.unref();
+    }
   }
 
   private stopHeartbeat(): void {

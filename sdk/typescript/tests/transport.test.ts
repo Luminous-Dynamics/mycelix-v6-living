@@ -62,18 +62,33 @@ class MockWebSocket {
 (global as unknown as { WebSocket: typeof MockWebSocket }).WebSocket = MockWebSocket;
 
 describe('WebSocketTransport', () => {
+  let transports: WebSocketTransport[] = [];
+
   beforeEach(() => {
     MockWebSocket.instances = [];
+    transports = [];
   });
+
+  afterEach(() => {
+    // Clean up all transports to prevent timer leaks
+    transports.forEach(t => t.disconnect());
+  });
+
+  // Helper to track transports for cleanup
+  const createTransport = (config: { url: string; [key: string]: unknown }) => {
+    const transport = new WebSocketTransport(config as any);
+    transports.push(transport);
+    return transport;
+  };
 
   describe('constructor', () => {
     it('should use default config values', () => {
-      const transport = new WebSocketTransport({ url: 'ws://test' });
+      const transport = createTransport({ url: 'ws://test' });
       expect(transport.getState()).toBe('disconnected');
     });
 
     it('should accept custom config values', () => {
-      const transport = new WebSocketTransport({
+      const transport = createTransport({
         url: 'ws://test',
         reconnectDelayMs: 5000,
         maxReconnectAttempts: 5,
@@ -84,7 +99,7 @@ describe('WebSocketTransport', () => {
 
   describe('connect', () => {
     it('should establish connection', async () => {
-      const transport = new WebSocketTransport({ url: 'ws://test' });
+      const transport = createTransport({ url: 'ws://test' });
 
       const connectPromise = transport.connect();
 
@@ -101,7 +116,7 @@ describe('WebSocketTransport', () => {
     });
 
     it('should not connect if already connected', async () => {
-      const transport = new WebSocketTransport({ url: 'ws://test' });
+      const transport = createTransport({ url: 'ws://test' });
 
       const connectPromise = transport.connect();
       setTimeout(() => MockWebSocket.instances[0].simulateOpen(), 0);
@@ -115,7 +130,7 @@ describe('WebSocketTransport', () => {
 
   describe('disconnect', () => {
     it('should disconnect', async () => {
-      const transport = new WebSocketTransport({ url: 'ws://test' });
+      const transport = createTransport({ url: 'ws://test' });
 
       const connectPromise = transport.connect();
       setTimeout(() => MockWebSocket.instances[0].simulateOpen(), 0);
@@ -130,7 +145,7 @@ describe('WebSocketTransport', () => {
 
   describe('message handling', () => {
     it('should dispatch protocol events', async () => {
-      const transport = new WebSocketTransport({ url: 'ws://test' });
+      const transport = createTransport({ url: 'ws://test' });
       const events: unknown[] = [];
 
       transport.onProtocolEvent((event) => {
@@ -154,7 +169,7 @@ describe('WebSocketTransport', () => {
 
   describe('event subscription', () => {
     it('should allow subscribing to events', () => {
-      const transport = new WebSocketTransport({ url: 'ws://test' });
+      const transport = createTransport({ url: 'ws://test' });
       const stateChanges: string[] = [];
 
       const unsubscribe = transport.on('stateChange', (event) => {
@@ -171,7 +186,7 @@ describe('WebSocketTransport', () => {
     });
 
     it('should allow unsubscribing', () => {
-      const transport = new WebSocketTransport({ url: 'ws://test' });
+      const transport = createTransport({ url: 'ws://test' });
       let callCount = 0;
 
       const unsubscribe = transport.on('stateChange', () => {

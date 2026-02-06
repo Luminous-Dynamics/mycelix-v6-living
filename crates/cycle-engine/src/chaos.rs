@@ -20,11 +20,10 @@
 
 use std::ops::Range;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
 
-use living_core::{CyclePhase, CycleState, LivingProtocolEvent, LivingResult, LivingProtocolError};
+use living_core::{CyclePhase, CycleState, LivingProtocolEvent};
 
 /// Configuration for chaos injection scenarios.
 #[derive(Debug, Clone, Default)]

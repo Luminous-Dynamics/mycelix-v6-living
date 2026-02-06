@@ -25,6 +25,7 @@ mod fuzz_tests {
     // Arbitrary implementations for proptest
     // =========================================================================
 
+    #[allow(dead_code)]
     fn arb_cycle_phase() -> impl Strategy<Value = CyclePhase> {
         prop_oneof![
             Just(CyclePhase::Shadow),
@@ -47,6 +48,7 @@ mod fuzz_tests {
         (1u64..=10000u64).prop_map(|n| n as f64 / 100.0)
     }
 
+    #[allow(dead_code)]
     fn arb_percentage() -> impl Strategy<Value = f64> {
         (0u64..=100u64).prop_map(|n| n as f64 / 100.0)
     }
@@ -585,7 +587,7 @@ mod fuzz_tests {
 
             engine.start().unwrap();
 
-            let initial_phase = engine.current_phase();
+            let _initial_phase = engine.current_phase();
             let initial_cycle = engine.cycle_number();
 
             // Multiple ticks without enough time elapsed shouldn't change phase
@@ -595,7 +597,7 @@ mod fuzz_tests {
             }
 
             // Phase might change due to simulated time, but should follow rules
-            let final_phase = engine.current_phase();
+            let _final_phase = engine.current_phase();
             let final_cycle = engine.cycle_number();
 
             // Cycle number should never decrease

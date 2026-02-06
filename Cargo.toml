@@ -8,6 +8,7 @@ members = [
     "crates/relational",
     "crates/structural",
     "crates/cycle-engine",
+    "crates/ws-server",
 ]
 
 [workspace.package]

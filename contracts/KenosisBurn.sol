@@ -21,6 +21,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./libraries/Errors.sol";
 
 contract KenosisBurn is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -120,20 +121,23 @@ contract KenosisBurn is AccessControl, ReentrancyGuard {
         bytes32 commitmentId,
         uint256 releaseBps
     ) external nonReentrant {
-        require(releaseBps > 0, "KenosisBurn: zero release");
-        require(releaseBps <= MAX_RELEASE_BPS, "KenosisBurn: exceeds 20% cap per cycle");
-        require(!commitments[commitmentId].irrevocable, "KenosisBurn: commitment exists");
+        if (releaseBps == 0) revert ZeroRelease();
+        if (releaseBps > MAX_RELEASE_BPS) revert ExceedsMaxRelease(releaseBps, MAX_RELEASE_BPS);
+        if (commitments[commitmentId].irrevocable) revert CommitmentAlreadyExists(commitmentId);
 
         // Check cycle cap
-        uint256 cycleTotal = cycleReleases[msg.sender][currentCycle] + releaseBps;
-        require(cycleTotal <= MAX_RELEASE_BPS, "KenosisBurn: cycle cap exceeded");
+        uint256 currentUsed = cycleReleases[msg.sender][currentCycle];
+        uint256 cycleTotal = currentUsed + releaseBps;
+        if (cycleTotal > MAX_RELEASE_BPS) {
+            revert CycleCapExceeded(msg.sender, currentCycle, currentUsed, releaseBps, MAX_RELEASE_BPS);
+        }
 
         // Get current reputation balance
         uint256 balance = reputationToken.balanceOf(msg.sender);
-        require(balance > 0, "KenosisBurn: no reputation to release");
+        if (balance == 0) revert NoReputationToRelease(msg.sender);
 
         uint256 burnAmount = (balance * releaseBps) / BPS_DENOMINATOR;
-        require(burnAmount > 0, "KenosisBurn: burn amount rounds to zero");
+        if (burnAmount == 0) revert BurnAmountRoundsToZero();
 
         // Record commitment (IRREVOCABLE)
         commitments[commitmentId] = KenosisCommitment({
@@ -159,9 +163,9 @@ contract KenosisBurn is AccessControl, ReentrancyGuard {
      */
     function executeKenosis(bytes32 commitmentId) external nonReentrant {
         KenosisCommitment storage commitment = commitments[commitmentId];
-        require(commitment.irrevocable, "KenosisBurn: commitment not found");
-        require(!commitment.executed, "KenosisBurn: already executed");
-        require(commitment.agent == msg.sender, "KenosisBurn: not your commitment");
+        if (!commitment.irrevocable) revert CommitmentNotFound(commitmentId);
+        if (commitment.executed) revert CommitmentAlreadyExecuted(commitmentId);
+        if (commitment.agent != msg.sender) revert NotCommitmentOwner(commitmentId, msg.sender, commitment.agent);
 
         uint256 balanceBefore = reputationToken.balanceOf(msg.sender);
         uint256 burnAmount = commitment.reputationBurned;
@@ -206,12 +210,46 @@ contract KenosisBurn is AccessControl, ReentrancyGuard {
     // =========================================================================
 
     function getCommitment(bytes32 commitmentId) external view returns (KenosisCommitment memory) {
-        require(commitments[commitmentId].irrevocable, "KenosisBurn: not found");
+        if (!commitments[commitmentId].irrevocable) revert CommitmentNotFound(commitmentId);
         return commitments[commitmentId];
     }
 
     function getAgentCommitments(address agent) external view returns (bytes32[] memory) {
         return agentCommitments[agent];
+    }
+
+    /**
+     * @notice Get commitments for an agent with pagination.
+     * @dev Prevents gas issues with agents having many commitments.
+     * @param agent The agent's address
+     * @param offset Starting index
+     * @param limit Maximum number of commitments to return
+     * @return commitmentIds Array of commitment IDs
+     * @return hasMore True if there are more commitments beyond this page
+     */
+    function getAgentCommitmentsPaginated(
+        address agent,
+        uint256 offset,
+        uint256 limit
+    ) external view returns (bytes32[] memory commitmentIds, bool hasMore) {
+        bytes32[] storage all = agentCommitments[agent];
+        uint256 total = all.length;
+
+        if (offset >= total) {
+            return (new bytes32[](0), false);
+        }
+
+        uint256 end = offset + limit;
+        if (end > total) {
+            end = total;
+        }
+
+        commitmentIds = new bytes32[](end - offset);
+        for (uint256 i = offset; i < end; i++) {
+            commitmentIds[i - offset] = all[i];
+        }
+
+        hasMore = end < total;
     }
 
     function getCycleReleaseTotal(address agent, uint256 cycle) external view returns (uint256) {

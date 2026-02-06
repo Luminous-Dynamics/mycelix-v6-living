@@ -15,6 +15,7 @@ pragma solidity ^0.8.20;
  */
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "./libraries/Errors.sol";
 
 contract FractalDAO is AccessControl {
     // =========================================================================
@@ -148,9 +149,9 @@ contract FractalDAO is AccessControl {
         uint256 supermajorityBps,
         DecisionMechanism mechanism
     ) external returns (bytes32) {
-        require(!patterns[patternId].exists, "FractalDAO: pattern exists");
-        require(quorumBps > 0 && quorumBps <= 10000, "FractalDAO: invalid quorum");
-        require(supermajorityBps >= 5000 && supermajorityBps <= 10000, "FractalDAO: invalid supermajority");
+        if (patterns[patternId].exists) revert PatternAlreadyExists(patternId);
+        if (quorumBps == 0 || quorumBps > 10000) revert InvalidQuorum(quorumBps);
+        if (supermajorityBps < 5000 || supermajorityBps > 10000) revert InvalidSupermajority(supermajorityBps);
 
         patterns[patternId] = GovernancePattern({
             patternId: patternId,
@@ -182,9 +183,9 @@ contract FractalDAO is AccessControl {
         bytes32 childId
     ) external returns (bytes32) {
         GovernancePattern storage parent = patterns[parentId];
-        require(parent.exists, "FractalDAO: parent not found");
-        require(!patterns[childId].exists, "FractalDAO: child exists");
-        require(uint8(parent.scale) > 0, "FractalDAO: cannot go below Individual");
+        if (!parent.exists) revert PatternNotFound(parentId);
+        if (patterns[childId].exists) revert PatternAlreadyExists(childId);
+        if (uint8(parent.scale) == 0) revert CannotScaleBelowIndividual(parentId);
 
         GovernanceScale childScale = GovernanceScale(uint8(parent.scale) - 1);
 
@@ -217,9 +218,9 @@ contract FractalDAO is AccessControl {
         bytes32 parentId
     ) external returns (bytes32) {
         GovernancePattern storage child = patterns[childId];
-        require(child.exists, "FractalDAO: child not found");
-        require(!patterns[parentId].exists, "FractalDAO: parent exists");
-        require(uint8(child.scale) < 5, "FractalDAO: cannot go above Global");
+        if (!child.exists) revert PatternNotFound(childId);
+        if (patterns[parentId].exists) revert PatternAlreadyExists(parentId);
+        if (uint8(child.scale) >= 5) revert CannotScaleAboveGlobal(childId);
 
         GovernanceScale parentScale = GovernanceScale(uint8(child.scale) + 1);
 
@@ -250,8 +251,8 @@ contract FractalDAO is AccessControl {
         bytes32 patternA,
         bytes32 patternB
     ) external returns (bool) {
-        require(patterns[patternA].exists, "FractalDAO: pattern A not found");
-        require(patterns[patternB].exists, "FractalDAO: pattern B not found");
+        if (!patterns[patternA].exists) revert PatternNotFound(patternA);
+        if (!patterns[patternB].exists) revert PatternNotFound(patternB);
 
         GovernancePattern storage a = patterns[patternA];
         GovernancePattern storage b = patterns[patternB];
@@ -281,9 +282,9 @@ contract FractalDAO is AccessControl {
         uint256 eligibleVoters,
         uint256 votingDuration
     ) external {
-        require(patterns[patternId].exists, "FractalDAO: pattern not found");
-        require(!proposals[proposalId].exists, "FractalDAO: proposal exists");
-        require(eligibleVoters > 0, "FractalDAO: no eligible voters");
+        if (!patterns[patternId].exists) revert PatternNotFound(patternId);
+        if (proposals[proposalId].exists) revert ProposalAlreadyExists(proposalId);
+        if (eligibleVoters == 0) revert NoEligibleVoters(proposalId);
 
         proposals[proposalId] = Proposal({
             proposalId: proposalId,
@@ -307,10 +308,10 @@ contract FractalDAO is AccessControl {
      */
     function vote(bytes32 proposalId, bool support) external {
         Proposal storage proposal = proposals[proposalId];
-        require(proposal.exists, "FractalDAO: proposal not found");
-        require(proposal.state == ProposalState.Active, "FractalDAO: not active");
-        require(block.timestamp <= proposal.deadline, "FractalDAO: voting ended");
-        require(!hasVoted[proposalId][msg.sender], "FractalDAO: already voted");
+        if (!proposal.exists) revert ProposalNotFound(proposalId);
+        if (proposal.state != ProposalState.Active) revert ProposalNotActive(proposalId, uint8(proposal.state));
+        if (block.timestamp > proposal.deadline) revert VotingEnded(proposalId, proposal.deadline, block.timestamp);
+        if (hasVoted[proposalId][msg.sender]) revert AlreadyVoted(proposalId, msg.sender);
 
         hasVoted[proposalId][msg.sender] = true;
 
@@ -328,9 +329,9 @@ contract FractalDAO is AccessControl {
      */
     function resolveProposal(bytes32 proposalId) external {
         Proposal storage proposal = proposals[proposalId];
-        require(proposal.exists, "FractalDAO: proposal not found");
-        require(proposal.state == ProposalState.Active, "FractalDAO: not active");
-        require(block.timestamp > proposal.deadline, "FractalDAO: voting not ended");
+        if (!proposal.exists) revert ProposalNotFound(proposalId);
+        if (proposal.state != ProposalState.Active) revert ProposalNotActive(proposalId, uint8(proposal.state));
+        if (block.timestamp <= proposal.deadline) revert VotingNotEnded(proposalId, proposal.deadline, block.timestamp);
 
         GovernancePattern storage pattern = patterns[proposal.patternId];
         uint256 totalVotes = proposal.votesFor + proposal.votesAgainst;
@@ -361,7 +362,7 @@ contract FractalDAO is AccessControl {
     uint256 private constant BPS_DENOMINATOR = 10000;
 
     function getPattern(bytes32 patternId) external view returns (GovernancePattern memory) {
-        require(patterns[patternId].exists, "FractalDAO: not found");
+        if (!patterns[patternId].exists) revert PatternNotFound(patternId);
         return patterns[patternId];
     }
 
@@ -370,11 +371,76 @@ contract FractalDAO is AccessControl {
     }
 
     function getProposal(bytes32 proposalId) external view returns (Proposal memory) {
-        require(proposals[proposalId].exists, "FractalDAO: not found");
+        if (!proposals[proposalId].exists) revert ProposalNotFound(proposalId);
         return proposals[proposalId];
     }
 
     function getAllPatterns() external view returns (bytes32[] memory) {
         return allPatterns;
+    }
+
+    /**
+     * @notice Get all patterns with pagination.
+     * @dev Prevents gas issues with many patterns.
+     * @param offset Starting index
+     * @param limit Maximum number of patterns to return
+     * @return patternIds Array of pattern IDs
+     * @return hasMore True if there are more patterns beyond this page
+     */
+    function getAllPatternsPaginated(
+        uint256 offset,
+        uint256 limit
+    ) external view returns (bytes32[] memory patternIds, bool hasMore) {
+        uint256 total = allPatterns.length;
+
+        if (offset >= total) {
+            return (new bytes32[](0), false);
+        }
+
+        uint256 end = offset + limit;
+        if (end > total) {
+            end = total;
+        }
+
+        patternIds = new bytes32[](end - offset);
+        for (uint256 i = offset; i < end; i++) {
+            patternIds[i - offset] = allPatterns[i];
+        }
+
+        hasMore = end < total;
+    }
+
+    /**
+     * @notice Get child patterns with pagination.
+     * @dev Prevents gas issues with patterns having many children.
+     * @param patternId The parent pattern ID
+     * @param offset Starting index
+     * @param limit Maximum number of children to return
+     * @return children Array of child pattern IDs
+     * @return hasMore True if there are more children beyond this page
+     */
+    function getChildPatternsPaginated(
+        bytes32 patternId,
+        uint256 offset,
+        uint256 limit
+    ) external view returns (bytes32[] memory children, bool hasMore) {
+        bytes32[] storage all = childPatterns[patternId];
+        uint256 total = all.length;
+
+        if (offset >= total) {
+            return (new bytes32[](0), false);
+        }
+
+        uint256 end = offset + limit;
+        if (end > total) {
+            end = total;
+        }
+
+        children = new bytes32[](end - offset);
+        for (uint256 i = offset; i < end; i++) {
+            children[i - offset] = all[i];
+        }
+
+        hasMore = end < total;
     }
 }

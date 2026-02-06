@@ -29,9 +29,9 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use living_core::{
-    BeautyScore, CyclePhase, Did, EpistemicClassification, EpistemicTier, Gate1Check,
-    Gate2Warning, LivingPrimitive, LivingProtocolEvent, LivingResult, MaterialityTier,
-    NormativeTier, PrimitiveModule, BeautyScoredEvent,
+    BeautyScore, BeautyScoredEvent, CyclePhase, Did, EpistemicClassification, EpistemicTier,
+    Gate1Check, Gate2Warning, LivingPrimitive, LivingProtocolEvent, LivingResult, MaterialityTier,
+    NormativeTier, PrimitiveModule,
 };
 
 // =============================================================================
@@ -157,11 +157,8 @@ impl BeautyValidityEngine {
         // Measure length variance across paragraphs.
         let lengths: Vec<f64> = paragraphs.iter().map(|p| p.len() as f64).collect();
         let mean_len = lengths.iter().sum::<f64>() / lengths.len() as f64;
-        let variance = lengths
-            .iter()
-            .map(|l| (l - mean_len).powi(2))
-            .sum::<f64>()
-            / lengths.len() as f64;
+        let variance =
+            lengths.iter().map(|l| (l - mean_len).powi(2)).sum::<f64>() / lengths.len() as f64;
         let std_dev = variance.sqrt();
 
         // Coefficient of variation: lower is more symmetric.
@@ -227,8 +224,10 @@ impl BeautyValidityEngine {
         }
 
         // Unique word ratio: higher ratio = more diverse vocabulary = more economical.
-        let unique_words: std::collections::HashSet<&str> =
-            words.iter().map(|w| w.to_lowercase().leak() as &str).collect();
+        let unique_words: std::collections::HashSet<&str> = words
+            .iter()
+            .map(|w| w.to_lowercase().leak() as &str)
+            .collect();
         let unique_ratio = unique_words.len() as f64 / word_count as f64;
 
         // Penalize very long proposals (diminishing returns after ~500 words).
@@ -246,10 +245,7 @@ impl BeautyValidityEngine {
         };
 
         // Sentence-to-word ratio: moderate sentence length is economical.
-        let sentence_count = content
-            .matches(['.', '!', '?'])
-            .count()
-            .max(1);
+        let sentence_count = content.matches(['.', '!', '?']).count().max(1);
         let avg_sentence_len = word_count as f64 / sentence_count as f64;
 
         // Ideal average sentence length: 15-25 words.
@@ -261,7 +257,8 @@ impl BeautyValidityEngine {
             (50.0 - avg_sentence_len).max(0.0) / 25.0
         };
 
-        let raw = unique_ratio * 0.4 + length_penalty * 0.2 + brevity_bonus * 0.2 + sentence_score * 0.2;
+        let raw =
+            unique_ratio * 0.4 + length_penalty * 0.2 + brevity_bonus * 0.2 + sentence_score * 0.2;
         raw.clamp(0.0, 1.0)
     }
 
@@ -276,7 +273,11 @@ impl BeautyValidityEngine {
 
         let content_words: std::collections::HashSet<String> = content
             .split_whitespace()
-            .map(|w| w.to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+            .map(|w| {
+                w.to_lowercase()
+                    .trim_matches(|c: char| !c.is_alphanumeric())
+                    .to_string()
+            })
             .filter(|w| w.len() > 3) // Skip short words.
             .collect();
 
@@ -289,7 +290,11 @@ impl BeautyValidityEngine {
         for pattern in existing_patterns {
             let pattern_words: std::collections::HashSet<String> = pattern
                 .split_whitespace()
-                .map(|w| w.to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+                .map(|w| {
+                    w.to_lowercase()
+                        .trim_matches(|c: char| !c.is_alphanumeric())
+                        .to_string()
+                })
                 .filter(|w| w.len() > 3)
                 .collect();
 
@@ -336,7 +341,11 @@ impl BeautyValidityEngine {
 
         let content_words: std::collections::HashSet<String> = content
             .split_whitespace()
-            .map(|w| w.to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+            .map(|w| {
+                w.to_lowercase()
+                    .trim_matches(|c: char| !c.is_alphanumeric())
+                    .to_string()
+            })
             .filter(|w| w.len() > 3)
             .collect();
 
@@ -349,7 +358,11 @@ impl BeautyValidityEngine {
             .iter()
             .flat_map(|p| {
                 p.split_whitespace()
-                    .map(|w| w.to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+                    .map(|w| {
+                        w.to_lowercase()
+                            .trim_matches(|c: char| !c.is_alphanumeric())
+                            .to_string()
+                    })
                     .filter(|w| w.len() > 3)
             })
             .collect();
@@ -393,7 +406,11 @@ impl BeautyValidityEngine {
             // from it appear in the content.
             let req_words: Vec<String> = req
                 .split_whitespace()
-                .map(|w| w.to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+                .map(|w| {
+                    w.to_lowercase()
+                        .trim_matches(|c: char| !c.is_alphanumeric())
+                        .to_string()
+                })
                 .filter(|w| w.len() > 3)
                 .collect();
 
@@ -497,10 +514,7 @@ impl LivingPrimitive for BeautyValidityEngine {
         1 // Tier 1: always on
     }
 
-    fn on_phase_change(
-        &mut self,
-        new_phase: CyclePhase,
-    ) -> LivingResult<Vec<LivingProtocolEvent>> {
+    fn on_phase_change(&mut self, new_phase: CyclePhase) -> LivingResult<Vec<LivingProtocolEvent>> {
         if new_phase == CyclePhase::Beauty {
             tracing::info!(
                 scored_proposals = self.scored_proposals.len(),
@@ -627,12 +641,32 @@ mod tests {
         );
 
         let s = &event.score;
-        assert!((0.0..=1.0).contains(&s.symmetry), "symmetry: {}", s.symmetry);
+        assert!(
+            (0.0..=1.0).contains(&s.symmetry),
+            "symmetry: {}",
+            s.symmetry
+        );
         assert!((0.0..=1.0).contains(&s.economy), "economy: {}", s.economy);
-        assert!((0.0..=1.0).contains(&s.resonance), "resonance: {}", s.resonance);
-        assert!((0.0..=1.0).contains(&s.surprise), "surprise: {}", s.surprise);
-        assert!((0.0..=1.0).contains(&s.completeness), "completeness: {}", s.completeness);
-        assert!((0.0..=1.0).contains(&s.composite), "composite: {}", s.composite);
+        assert!(
+            (0.0..=1.0).contains(&s.resonance),
+            "resonance: {}",
+            s.resonance
+        );
+        assert!(
+            (0.0..=1.0).contains(&s.surprise),
+            "surprise: {}",
+            s.surprise
+        );
+        assert!(
+            (0.0..=1.0).contains(&s.completeness),
+            "completeness: {}",
+            s.completeness
+        );
+        assert!(
+            (0.0..=1.0).contains(&s.composite),
+            "composite: {}",
+            s.composite
+        );
 
         // Gate 1 should pass.
         let checks = engine.gate1_check();
@@ -750,9 +784,7 @@ mod tests {
     fn test_surprise_novel_content() {
         let engine = BeautyValidityEngine::new();
 
-        let existing = vec![
-            "governance reform voting mechanisms transparency".to_string(),
-        ];
+        let existing = vec!["governance reform voting mechanisms transparency".to_string()];
 
         let novel = "Introducing quantum-resistant lattice-based cryptographic \
             signatures for post-quantum decentralized identity verification.";
@@ -791,7 +823,11 @@ mod tests {
             Decentralization guarantees are ensured by distributed validators.";
 
         let score = engine.compute_completeness(content, &requirements);
-        assert!(score > 0.8, "All requirements met should score high: {}", score);
+        assert!(
+            score > 0.8,
+            "All requirements met should score high: {}",
+            score
+        );
     }
 
     #[test]
@@ -806,7 +842,11 @@ mod tests {
         let content = "This is about gardening and cooking recipes.";
 
         let score = engine.compute_completeness(content, &requirements);
-        assert!(score < 0.5, "No requirements met should score low: {}", score);
+        assert!(
+            score < 0.5,
+            "No requirements met should score low: {}",
+            score
+        );
     }
 
     #[test]
@@ -825,7 +865,9 @@ mod tests {
         engine.score_proposal("prop-1", content, "did:scorer:b", &[], &[]);
         engine.score_proposal("prop-1", content, "did:scorer:c", &[], &[]);
 
-        let agg = engine.aggregate_scores("prop-1").expect("Should have scores");
+        let agg = engine
+            .aggregate_scores("prop-1")
+            .expect("Should have scores");
         assert!((0.0..=1.0).contains(&agg.composite));
     }
 

@@ -162,7 +162,8 @@ impl EntanglementEngine {
         let avg_quality: f64 = history
             .map(|h| h.iter().map(|e| e.quality_score).sum::<f64>() / h.len() as f64)
             .unwrap_or(0.0);
-        let initial_strength = (self.config.base_strength * (1.0 + avg_quality) / 2.0).clamp(0.0, 1.0);
+        let initial_strength =
+            (self.config.base_strength * (1.0 + avg_quality) / 2.0).clamp(0.0, 1.0);
 
         let now = Utc::now();
         let pair = EntangledPair {
@@ -196,9 +197,10 @@ impl EntanglementEngine {
     /// Returns the current (decayed) strength, or an error if the pair is not
     /// found.
     pub fn update_entanglement(&mut self, pair_id: &str) -> LivingResult<f64> {
-        let pair = self.pairs.get_mut(pair_id).ok_or_else(|| {
-            LivingProtocolError::AgentNotFound(pair_id.to_string())
-        })?;
+        let pair = self
+            .pairs
+            .get_mut(pair_id)
+            .ok_or_else(|| LivingProtocolError::AgentNotFound(pair_id.to_string()))?;
         let now = Utc::now();
         let current = pair.current_strength(now);
         pair.entanglement_strength = current;
@@ -289,10 +291,7 @@ impl LivingPrimitive for EntanglementEngine {
         2
     }
 
-    fn on_phase_change(
-        &mut self,
-        new_phase: CyclePhase,
-    ) -> LivingResult<Vec<LivingProtocolEvent>> {
+    fn on_phase_change(&mut self, new_phase: CyclePhase) -> LivingResult<Vec<LivingProtocolEvent>> {
         let mut events = Vec::new();
 
         if new_phase == CyclePhase::CoCreation {
@@ -312,9 +311,10 @@ impl LivingPrimitive for EntanglementEngine {
         let mut checks = Vec::new();
 
         // Gate 1 invariant: all entanglement strengths in [0.0, 1.0].
-        let all_bounded = self.pairs.values().all(|p| {
-            p.entanglement_strength >= 0.0 && p.entanglement_strength <= 1.0
-        });
+        let all_bounded = self
+            .pairs
+            .values()
+            .all(|p| p.entanglement_strength >= 0.0 && p.entanglement_strength <= 1.0);
         checks.push(Gate1Check {
             invariant: "entanglement_strength_bounded".to_string(),
             passed: all_bounded,
@@ -347,7 +347,9 @@ impl LivingPrimitive for EntanglementEngine {
         // Constitutional warning: entanglements near death should be surfaced.
         for pair in self.pairs.values() {
             let strength = pair.current_strength(now);
-            if strength < self.config.min_strength_threshold * 3.0 && strength >= self.config.min_strength_threshold {
+            if strength < self.config.min_strength_threshold * 3.0
+                && strength >= self.config.min_strength_threshold
+            {
                 warnings.push(Gate2Warning {
                     harmony_violated: "Sacred Reciprocity".to_string(),
                     severity: 0.3,

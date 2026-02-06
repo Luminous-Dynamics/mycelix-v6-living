@@ -16,18 +16,17 @@ use std::sync::Arc;
 
 use chrono::Utc;
 
-use cycle_engine::{CycleEngineBuilder, MetabolismCycleEngine};
 use cycle_engine::phase_handlers::{
     BeautyPhaseHandler, CoCreationPhaseHandler, CompostingPhaseHandler,
-    EmergentPersonhoodPhaseHandler, ErosPhaseHandler, KenosisPhaseHandler,
-    LiminalPhaseHandler, NegativeCapabilityPhaseHandler, PhaseHandler,
-    ShadowPhaseHandler,
+    EmergentPersonhoodPhaseHandler, ErosPhaseHandler, KenosisPhaseHandler, LiminalPhaseHandler,
+    NegativeCapabilityPhaseHandler, PhaseHandler, ShadowPhaseHandler,
 };
+use cycle_engine::{CycleEngineBuilder, MetabolismCycleEngine};
 use living_core::{
-    CompostableEntity, CyclePhase, CycleState, EntanglementConfig, EventBus,
-    EpistemicClassification, EpistemicTier, FeatureFlags, InMemoryEventBus,
-    KenosisConfig, LiminalEntityType, LivingProtocolConfig, LivingProtocolEvent,
-    MaterialityTier, NegativeCapabilityConfig, NormativeTier, ShadowConfig,
+    CompostableEntity, CyclePhase, CycleState, EntanglementConfig, EpistemicClassification,
+    EpistemicTier, EventBus, FeatureFlags, InMemoryEventBus, KenosisConfig, LiminalEntityType,
+    LivingProtocolConfig, LivingProtocolEvent, MaterialityTier, NegativeCapabilityConfig,
+    NormativeTier, ShadowConfig,
 };
 use metabolism::composting::CompostingReason;
 
@@ -100,7 +99,10 @@ fn test_full_28_day_cycle_simulation() {
     for _ in 0..3 {
         let tick_events = engine.tick().unwrap();
         // Ticks should succeed (may or may not produce events)
-        assert!(tick_events.len() <= 10, "Tick should not produce excessive events");
+        assert!(
+            tick_events.len() <= 10,
+            "Tick should not produce excessive events"
+        );
     }
 
     // Progress through all phases
@@ -124,9 +126,9 @@ fn test_full_28_day_cycle_simulation() {
         );
 
         // Verify transition event is present
-        let has_transition_event = transition_events.iter().any(|e| {
-            matches!(e, LivingProtocolEvent::PhaseTransitioned(_))
-        });
+        let has_transition_event = transition_events
+            .iter()
+            .any(|e| matches!(e, LivingProtocolEvent::PhaseTransitioned(_)));
         assert!(
             has_transition_event,
             "Transition to {:?} should include PhaseTransitioned event",
@@ -148,10 +150,13 @@ fn test_full_28_day_cycle_simulation() {
     assert_eq!(total_days, 28); // Full 28-day cycle
 
     // Should have cycle started event for cycle 2
-    let has_cycle_started = final_transition.iter().any(|e| {
-        matches!(e, LivingProtocolEvent::CycleStarted(ev) if ev.cycle_number == 2)
-    });
-    assert!(has_cycle_started, "Should have CycleStarted event for cycle 2");
+    let has_cycle_started = final_transition
+        .iter()
+        .any(|e| matches!(e, LivingProtocolEvent::CycleStarted(ev) if ev.cycle_number == 2));
+    assert!(
+        has_cycle_started,
+        "Should have CycleStarted event for cycle 2"
+    );
 
     // Verify transition history
     assert_eq!(engine.transition_history().len(), 9);
@@ -169,18 +174,14 @@ fn test_shadow_phase_surfaces_suppressed_content() {
     handler.engine_mut().record_suppression(
         "controversial-proposal",
         "minority view disagreement",
-        0.8, // high-rep suppressor
-        0.15, // low-rep author (should be prioritized)
+        0.8,   // high-rep suppressor
+        0.15,  // low-rep author (should be prioritized)
         false, // not gate1 protected
     );
 
-    handler.engine_mut().record_suppression(
-        "standard-content",
-        "off-topic",
-        0.7,
-        0.5,
-        false,
-    );
+    handler
+        .engine_mut()
+        .record_suppression("standard-content", "off-topic", 0.7, 0.5, false);
 
     let state = make_state(1, CyclePhase::Shadow, 0);
 
@@ -200,7 +201,10 @@ fn test_shadow_phase_surfaces_suppressed_content() {
         .iter()
         .filter(|e| matches!(e, LivingProtocolEvent::ShadowSurfaced(_)))
         .collect();
-    assert!(!shadow_events.is_empty(), "Should have ShadowSurfaced events");
+    assert!(
+        !shadow_events.is_empty(),
+        "Should have ShadowSurfaced events"
+    );
 
     // Verify low-rep content was prioritized
     if let LivingProtocolEvent::ShadowSurfaced(event) = &shadow_events[0] {
@@ -269,7 +273,10 @@ fn test_composting_phase_decomposes_failed_entities() {
     handler.on_tick(&state).unwrap();
 
     // Complete composting
-    let nutrients = handler.engine_mut().complete_composting(&record.id).unwrap();
+    let nutrients = handler
+        .engine_mut()
+        .complete_composting(&record.id)
+        .unwrap();
     assert_eq!(nutrients.len(), 2);
 
     // Verify decomposition progress
@@ -377,8 +384,8 @@ fn test_negative_capability_holds_uncertain_claims() {
 
 #[test]
 fn test_eros_phase_computes_attractor_fields() {
-    use std::collections::HashMap;
     use living_core::KVectorSignature;
+    use std::collections::HashMap;
 
     // Enable eros_attractor feature
     let mut features = FeatureFlags::default();
@@ -406,7 +413,10 @@ fn test_eros_phase_computes_attractor_fields() {
     k_vectors.insert("did:agent:bob".to_string(), bob_k);
 
     // Compute attractor fields
-    let events = handler.engine_mut().compute_attractor_fields(&k_vectors).unwrap();
+    let events = handler
+        .engine_mut()
+        .compute_attractor_fields(&k_vectors)
+        .unwrap();
 
     // Should produce attractor field events for complementary agents
     assert!(
@@ -456,10 +466,7 @@ fn test_cocreation_phase_forms_and_decays_entanglements() {
     // Form entanglement
     let event = handler
         .engine_mut()
-        .form_entanglement(
-            &"did:agent:alice".to_string(),
-            &"did:agent:bob".to_string(),
-        )
+        .form_entanglement(&"did:agent:alice".to_string(), &"did:agent:bob".to_string())
         .unwrap();
 
     assert!(
@@ -497,7 +504,10 @@ fn test_beauty_phase_scores_proposals() {
          composition of existing primitives, maintaining pattern consistency \
          while introducing novel cross-cutting concerns elegantly.",
         "did:scorer:beauty-validator",
-        &["existing-pattern-1".to_string(), "existing-pattern-2".to_string()],
+        &[
+            "existing-pattern-1".to_string(),
+            "existing-pattern-2".to_string(),
+        ],
         &["requirement-1".to_string(), "requirement-2".to_string()],
     );
 
@@ -555,8 +565,12 @@ fn test_kenosis_phase_handles_voluntary_release() {
     handler.on_enter(&state).unwrap();
 
     // Register agents
-    handler.engine_mut().register_agent("did:agent:generous", 100.0);
-    handler.engine_mut().register_agent("did:agent:strategic", 200.0);
+    handler
+        .engine_mut()
+        .register_agent("did:agent:generous", 100.0);
+    handler
+        .engine_mut()
+        .register_agent("did:agent:strategic", 200.0);
 
     // Commit kenosis
     let commitment1 = handler
@@ -577,13 +591,18 @@ fn test_kenosis_phase_handles_voluntary_release() {
     assert_eq!(commitment2.reputation_released, 40.0); // 20% of 200
 
     // Execute kenosis
-    let (before1, after1) = handler.engine_mut().execute_kenosis(&commitment1.id).unwrap();
+    let (before1, after1) = handler
+        .engine_mut()
+        .execute_kenosis(&commitment1.id)
+        .unwrap();
     assert_eq!(before1, 100.0);
     assert_eq!(after1, 85.0);
 
     // Verify 20% cap per cycle is enforced
     // Agent already committed 15%, so trying another 10% should cap at remaining 5%
-    let result = handler.engine_mut().commit_kenosis("did:agent:generous", 0.10);
+    let result = handler
+        .engine_mut()
+        .commit_kenosis("did:agent:generous", 0.10);
     // This should succeed but be capped to 5% (20% - 15% already committed)
     assert!(
         result.is_ok(),
@@ -596,7 +615,9 @@ fn test_kenosis_phase_handles_voluntary_release() {
     );
 
     // Now trying to commit more should fail (already at 20%)
-    let third_result = handler.engine_mut().commit_kenosis("did:agent:generous", 0.01);
+    let third_result = handler
+        .engine_mut()
+        .commit_kenosis("did:agent:generous", 0.01);
     assert!(
         third_result.is_err(),
         "Should fail: already at 20% cap for this cycle"
@@ -642,8 +663,7 @@ fn test_shadow_surfacing_to_composting_flow() {
     );
 
     // 2. Extract the surfaced content ID
-    let surfaced_content_id = if let LivingProtocolEvent::ShadowSurfaced(event) =
-        &shadow_events[0]
+    let surfaced_content_id = if let LivingProtocolEvent::ShadowSurfaced(event) = &shadow_events[0]
     {
         event.shadow.original_content_id.clone()
     } else {
@@ -652,10 +672,8 @@ fn test_shadow_surfacing_to_composting_flow() {
 
     // 3. Composting phase processes the surfaced content
     let event_bus: Arc<dyn EventBus> = Arc::new(InMemoryEventBus::new());
-    let mut composting_handler = CompostingPhaseHandler::new(
-        living_core::CompostingConfig::default(),
-        event_bus,
-    );
+    let mut composting_handler =
+        CompostingPhaseHandler::new(living_core::CompostingConfig::default(), event_bus);
 
     let composting_state = make_state(1, CyclePhase::Composting, 0);
     composting_handler.on_enter(&composting_state).unwrap();
@@ -678,8 +696,7 @@ fn test_shadow_surfacing_to_composting_flow() {
         .engine_mut()
         .extract_nutrient(
             &record.id,
-            "Proposal needed better community engagement before formal submission"
-                .to_string(),
+            "Proposal needed better community engagement before formal submission".to_string(),
             test_classification(),
         )
         .unwrap();
@@ -739,7 +756,10 @@ fn test_entanglement_influences_co_creation() {
         )
         .unwrap();
 
-    assert!(event.pair.entanglement_strength > 0.0, "Should form entanglement with positive strength");
+    assert!(
+        event.pair.entanglement_strength > 0.0,
+        "Should form entanglement with positive strength"
+    );
 }
 
 // =========================================================================
@@ -792,10 +812,10 @@ fn test_realistic_multi_agent_cycle() {
     // Define agents with varying reputations (normalized to [0.0, 1.0] for shadow integration)
     // We'll use both absolute rep for kenosis and normalized for shadow
     let agents = [
-        ("did:agent:whale", 1000.0, 0.95),      // High-rep agent
-        ("did:agent:dolphin", 500.0, 0.7),      // Medium-rep agent
-        ("did:agent:minnow", 50.0, 0.15),       // Low-rep agent (< 0.3 threshold)
-        ("did:agent:newcomer", 10.0, 0.05),     // New agent
+        ("did:agent:whale", 1000.0, 0.95),  // High-rep agent
+        ("did:agent:dolphin", 500.0, 0.7),  // Medium-rep agent
+        ("did:agent:minnow", 50.0, 0.15),   // Low-rep agent (< 0.3 threshold)
+        ("did:agent:newcomer", 10.0, 0.05), // New agent
     ];
 
     // ===== SHADOW PHASE =====
@@ -831,10 +851,8 @@ fn test_realistic_multi_agent_cycle() {
 
     // ===== COMPOSTING PHASE =====
     let event_bus: Arc<dyn EventBus> = Arc::new(InMemoryEventBus::new());
-    let mut composting_handler = CompostingPhaseHandler::new(
-        living_core::CompostingConfig::default(),
-        event_bus.clone(),
-    );
+    let mut composting_handler =
+        CompostingPhaseHandler::new(living_core::CompostingConfig::default(), event_bus.clone());
     let composting_state = make_state(1, CyclePhase::Composting, 0);
 
     composting_handler.on_enter(&composting_state).unwrap();
@@ -861,7 +879,10 @@ fn test_realistic_multi_agent_cycle() {
         )
         .unwrap();
 
-    composting_handler.engine_mut().complete_composting(&record.id).unwrap();
+    composting_handler
+        .engine_mut()
+        .complete_composting(&record.id)
+        .unwrap();
     composting_handler.on_tick(&composting_state).unwrap();
     composting_handler.on_exit(&composting_state).unwrap();
 
@@ -943,7 +964,10 @@ fn test_realistic_multi_agent_cycle() {
 
     // Verify final state
     assert_eq!(
-        kenosis_handler.engine().get_reputation(agents[0].0).unwrap(),
+        kenosis_handler
+            .engine()
+            .get_reputation(agents[0].0)
+            .unwrap(),
         800.0,
         "Whale's reputation should be reduced after kenosis"
     );

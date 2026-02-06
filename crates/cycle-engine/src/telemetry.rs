@@ -114,10 +114,8 @@ impl CycleMetrics {
                 KeyValue::new("phase_day", day as i64),
             ],
         );
-        self.total_ticks.add(
-            1,
-            &[KeyValue::new("phase", format!("{:?}", phase))],
-        );
+        self.total_ticks
+            .add(1, &[KeyValue::new("phase", format!("{:?}", phase))]);
     }
 
     /// Record a tick error.
@@ -267,8 +265,7 @@ pub fn init_telemetry_with_config(config: TelemetryConfig) -> Result<(), Telemet
     }
 
     // Set up tracing subscriber with OpenTelemetry layer
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_target(true)
@@ -277,21 +274,24 @@ pub fn init_telemetry_with_config(config: TelemetryConfig) -> Result<(), Telemet
         .with_line_number(true);
 
     if let Some(tracer) = tracer {
-        let otel_layer = tracing_opentelemetry::layer()
-            .with_tracer(tracer);
+        let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
         tracing_subscriber::registry()
             .with(env_filter)
             .with(fmt_layer)
             .with(otel_layer)
             .try_init()
-            .map_err(|e: tracing_subscriber::util::TryInitError| TelemetryError::SubscriberInit(e.to_string()))?;
+            .map_err(|e: tracing_subscriber::util::TryInitError| {
+                TelemetryError::SubscriberInit(e.to_string())
+            })?;
     } else {
         tracing_subscriber::registry()
             .with(env_filter)
             .with(fmt_layer)
             .try_init()
-            .map_err(|e: tracing_subscriber::util::TryInitError| TelemetryError::SubscriberInit(e.to_string()))?;
+            .map_err(|e: tracing_subscriber::util::TryInitError| {
+                TelemetryError::SubscriberInit(e.to_string())
+            })?;
     }
 
     tracing::info!(
@@ -324,8 +324,8 @@ pub enum TelemetryError {
 
 /// Custom span attributes for cycle engine operations.
 pub mod attributes {
-    use opentelemetry::KeyValue;
     use living_core::CyclePhase;
+    use opentelemetry::KeyValue;
 
     /// Create span attributes for a cycle phase.
     pub fn phase_attributes(phase: CyclePhase, day: u32, cycle_number: u64) -> Vec<KeyValue> {
@@ -381,11 +381,8 @@ mod tests {
 
     #[test]
     fn test_state_change_attributes() {
-        let attrs = attributes::state_change_attributes(
-            CyclePhase::Shadow,
-            CyclePhase::Composting,
-            1,
-        );
+        let attrs =
+            attributes::state_change_attributes(CyclePhase::Shadow, CyclePhase::Composting, 1);
         assert_eq!(attrs.len(), 3);
     }
 }

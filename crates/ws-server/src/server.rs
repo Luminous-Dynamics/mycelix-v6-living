@@ -1,8 +1,8 @@
 //! WebSocket server implementation.
 
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 use futures_util::{SinkExt, StreamExt};
@@ -14,7 +14,7 @@ use tokio::sync::{broadcast, RwLock};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 
-use cycle_engine::{MetabolismCycleEngine, CycleEngineBuilder};
+use cycle_engine::{CycleEngineBuilder, MetabolismCycleEngine};
 use living_core::CyclePhase;
 
 use crate::rpc::{RpcError, RpcRequest, RpcResponse};
@@ -61,7 +61,6 @@ pub struct CycleStateResponse {
     pub cycle_started: String,
     pub phase_day: u32,
 }
-
 
 /// Phase transition for history responses.
 #[derive(Debug, Clone, Serialize)]
@@ -426,27 +425,29 @@ impl WebSocketServer {
             "getPhaseMetrics" => {
                 // Parse phase from params
                 let phase = match request.params.get("phase").and_then(|v| v.as_str()) {
-                    Some(phase_str) => {
-                        match phase_str {
-                            "Shadow" => CyclePhase::Shadow,
-                            "Composting" => CyclePhase::Composting,
-                            "Liminal" => CyclePhase::Liminal,
-                            "NegativeCapability" => CyclePhase::NegativeCapability,
-                            "Eros" => CyclePhase::Eros,
-                            "CoCreation" => CyclePhase::CoCreation,
-                            "Beauty" => CyclePhase::Beauty,
-                            "EmergentPersonhood" => CyclePhase::EmergentPersonhood,
-                            "Kenosis" => CyclePhase::Kenosis,
-                            _ => return RpcResponse::error(
+                    Some(phase_str) => match phase_str {
+                        "Shadow" => CyclePhase::Shadow,
+                        "Composting" => CyclePhase::Composting,
+                        "Liminal" => CyclePhase::Liminal,
+                        "NegativeCapability" => CyclePhase::NegativeCapability,
+                        "Eros" => CyclePhase::Eros,
+                        "CoCreation" => CyclePhase::CoCreation,
+                        "Beauty" => CyclePhase::Beauty,
+                        "EmergentPersonhood" => CyclePhase::EmergentPersonhood,
+                        "Kenosis" => CyclePhase::Kenosis,
+                        _ => {
+                            return RpcResponse::error(
                                 request.id.clone(),
-                                RpcError::invalid_params(&format!("Unknown phase: {}", phase_str))
-                            ),
+                                RpcError::invalid_params(&format!("Unknown phase: {}", phase_str)),
+                            )
                         }
+                    },
+                    None => {
+                        return RpcResponse::error(
+                            request.id.clone(),
+                            RpcError::invalid_params("Missing 'phase' parameter"),
+                        )
                     }
-                    None => return RpcResponse::error(
-                        request.id.clone(),
-                        RpcError::invalid_params("Missing 'phase' parameter")
-                    ),
                 };
 
                 let engine = engine.read().await;
@@ -467,10 +468,12 @@ impl WebSocketServer {
             "isOperationPermitted" => {
                 let operation = match request.params.get("operation").and_then(|v| v.as_str()) {
                     Some(op) => op,
-                    None => return RpcResponse::error(
-                        request.id.clone(),
-                        RpcError::invalid_params("Missing 'operation' parameter")
-                    ),
+                    None => {
+                        return RpcResponse::error(
+                            request.id.clone(),
+                            RpcError::invalid_params("Missing 'operation' parameter"),
+                        )
+                    }
                 };
 
                 let engine = engine.read().await;
@@ -480,7 +483,7 @@ impl WebSocketServer {
 
             _ => RpcResponse::error(
                 request.id.clone(),
-                RpcError::method_not_found(&request.method)
+                RpcError::method_not_found(&request.method),
             ),
         }
     }

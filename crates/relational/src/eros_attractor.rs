@@ -29,9 +29,8 @@ use serde::{Deserialize, Serialize};
 
 use living_core::{
     AttractorFieldComputedEvent, CyclePhase, Did, EpistemicClassification, EpistemicTier,
-    FeatureFlags, Gate1Check, Gate2Warning, KVectorSignature, LivingPrimitive,
-    LivingProtocolError, LivingProtocolEvent, LivingResult, MaterialityTier, NormativeTier,
-    PrimitiveModule,
+    FeatureFlags, Gate1Check, Gate2Warning, KVectorSignature, LivingPrimitive, LivingProtocolError,
+    LivingProtocolEvent, LivingResult, MaterialityTier, NormativeTier, PrimitiveModule,
 };
 
 // =============================================================================
@@ -155,10 +154,7 @@ impl ErosAttractorEngine {
 
         self.attractor_fields = fields;
 
-        tracing::info!(
-            field_count = events.len(),
-            "[14] Attractor fields computed"
-        );
+        tracing::info!(field_count = events.len(), "[14] Attractor fields computed");
 
         Ok(events)
     }
@@ -323,7 +319,10 @@ impl LivingPrimitive for ErosAttractorEngine {
         let avg_field_strength = if self.attractor_fields.is_empty() {
             0.0
         } else {
-            self.attractor_fields.iter().map(|f| f.field_strength).sum::<f64>()
+            self.attractor_fields
+                .iter()
+                .map(|f| f.field_strength)
+                .sum::<f64>()
                 / self.attractor_fields.len() as f64
         };
 
@@ -393,7 +392,11 @@ mod tests {
         let b = sample_kvec([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]);
 
         let strength = ErosAttractorEngine::compute_attraction_strength(&a, &b);
-        assert!(strength >= 0.0 && strength <= 1.0, "Strength {} out of [0, 1]", strength);
+        assert!(
+            strength >= 0.0 && strength <= 1.0,
+            "Strength {} out of [0, 1]",
+            strength
+        );
     }
 
     #[test]

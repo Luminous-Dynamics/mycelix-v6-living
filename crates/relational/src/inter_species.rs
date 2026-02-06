@@ -107,12 +107,10 @@ impl InterSpeciesEngine {
         self.check_enabled()?;
 
         if !Self::validate_bridge_protocol(bridge_protocol) {
-            return Err(LivingProtocolError::InterSpeciesProtocolMismatch(
-                format!(
-                    "Unknown bridge protocol '{}'. Known protocols: {:?}",
-                    bridge_protocol, KNOWN_BRIDGE_PROTOCOLS
-                ),
-            ));
+            return Err(LivingProtocolError::InterSpeciesProtocolMismatch(format!(
+                "Unknown bridge protocol '{}'. Known protocols: {:?}",
+                bridge_protocol, KNOWN_BRIDGE_PROTOCOLS
+            )));
         }
 
         let now = Utc::now();
@@ -149,7 +147,10 @@ impl InterSpeciesEngine {
     }
 
     /// Get all participants of a given species type.
-    pub fn get_participants_by_species(&self, species: &SpeciesType) -> Vec<&InterSpeciesParticipant> {
+    pub fn get_participants_by_species(
+        &self,
+        species: &SpeciesType,
+    ) -> Vec<&InterSpeciesParticipant> {
         self.participants
             .values()
             .filter(|p| &p.species == species)
@@ -171,10 +172,7 @@ impl InterSpeciesEngine {
             .iter()
             .any(|c| c == action || c == "*");
 
-        let has_constraint = participant
-            .constraints
-            .iter()
-            .any(|c| c == action);
+        let has_constraint = participant.constraints.iter().any(|c| c == action);
 
         has_capability && !has_constraint
     }
@@ -248,9 +246,10 @@ impl LivingPrimitive for InterSpeciesEngine {
         let mut checks = Vec::new();
 
         // Gate 1 invariant: all participants have a valid bridge protocol.
-        let all_valid = self.participants.values().all(|p| {
-            Self::validate_bridge_protocol(&p.bridge_protocol)
-        });
+        let all_valid = self
+            .participants
+            .values()
+            .all(|p| Self::validate_bridge_protocol(&p.bridge_protocol));
         checks.push(Gate1Check {
             invariant: "bridge_protocol_valid".to_string(),
             passed: all_valid,
@@ -363,12 +362,8 @@ mod tests {
     fn test_invalid_bridge_protocol() {
         let mut engine = make_engine();
 
-        let result = engine.register_participant(
-            SpeciesType::Human,
-            "unknown-protocol-v99",
-            vec![],
-            vec![],
-        );
+        let result =
+            engine.register_participant(SpeciesType::Human, "unknown-protocol-v99", vec![], vec![]);
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -381,11 +376,21 @@ mod tests {
 
     #[test]
     fn test_validate_bridge_protocol() {
-        assert!(InterSpeciesEngine::validate_bridge_protocol("mycelix-human-v1"));
-        assert!(InterSpeciesEngine::validate_bridge_protocol("mycelix-ai-agent-v1"));
-        assert!(InterSpeciesEngine::validate_bridge_protocol("mycelix-sensor-mqtt-v1"));
-        assert!(InterSpeciesEngine::validate_bridge_protocol("mycelix-ecological-proxy-v1"));
-        assert!(!InterSpeciesEngine::validate_bridge_protocol("invalid-protocol"));
+        assert!(InterSpeciesEngine::validate_bridge_protocol(
+            "mycelix-human-v1"
+        ));
+        assert!(InterSpeciesEngine::validate_bridge_protocol(
+            "mycelix-ai-agent-v1"
+        ));
+        assert!(InterSpeciesEngine::validate_bridge_protocol(
+            "mycelix-sensor-mqtt-v1"
+        ));
+        assert!(InterSpeciesEngine::validate_bridge_protocol(
+            "mycelix-ecological-proxy-v1"
+        ));
+        assert!(!InterSpeciesEngine::validate_bridge_protocol(
+            "invalid-protocol"
+        ));
         assert!(!InterSpeciesEngine::validate_bridge_protocol(""));
     }
 
@@ -508,12 +513,8 @@ mod tests {
     fn test_feature_flag_gate() {
         let mut engine = InterSpeciesEngine::new(disabled_features());
 
-        let result = engine.register_participant(
-            SpeciesType::Human,
-            "mycelix-human-v1",
-            vec![],
-            vec![],
-        );
+        let result =
+            engine.register_participant(SpeciesType::Human, "mycelix-human-v1", vec![], vec![]);
 
         assert!(result.is_err());
         match result.unwrap_err() {

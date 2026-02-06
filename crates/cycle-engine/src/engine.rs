@@ -7,10 +7,8 @@ use std::collections::HashMap;
 use tracing::info;
 
 use living_core::{
-    CyclePhase, CycleState, PhaseTransition, PhaseMetrics,
-    LivingProtocolEvent, PhaseTransitionedEvent, CycleStartedEvent,
-    LivingProtocolConfig,
-    LivingProtocolError, LivingResult,
+    CyclePhase, CycleStartedEvent, CycleState, LivingProtocolConfig, LivingProtocolError,
+    LivingProtocolEvent, LivingResult, PhaseMetrics, PhaseTransition, PhaseTransitionedEvent,
 };
 
 use crate::phase_handlers::PhaseHandler;
@@ -277,7 +275,10 @@ impl MetabolismCycleEngine {
             self.state.cycle_started = now;
             self.cycle_events.clear();
 
-            info!(cycle = self.state.cycle_number, "New metabolism cycle started");
+            info!(
+                cycle = self.state.cycle_number,
+                "New metabolism cycle started"
+            );
 
             events.push(LivingProtocolEvent::CycleStarted(CycleStartedEvent {
                 cycle_number: self.state.cycle_number,
@@ -325,9 +326,9 @@ impl MetabolismCycleEngine {
 
         // Let the current phase handler contribute metrics
         if let Some(handler) = self.phase_handlers.get(&self.state.current_phase) {
-            if let Ok(handler_metrics) = serde_json::from_value::<PhaseMetrics>(
-                handler.collect_metrics(),
-            ) {
+            if let Ok(handler_metrics) =
+                serde_json::from_value::<PhaseMetrics>(handler.collect_metrics())
+            {
                 metrics = handler_metrics;
             }
         }
@@ -345,10 +346,8 @@ impl MetabolismCycleEngine {
             let accel = self.config.cycle.time_acceleration;
 
             // Saturating multiplication to prevent overflow
-            let ms = crate::chaos::saturating_time_acceleration(
-                real_elapsed.num_milliseconds(),
-                accel,
-            );
+            let ms =
+                crate::chaos::saturating_time_acceleration(real_elapsed.num_milliseconds(), accel);
             let accelerated = Duration::milliseconds(ms);
 
             crate::chaos::saturating_add_duration(self.state.cycle_started, accelerated)

@@ -39,14 +39,14 @@
 //! All five primitives implement the `LivingPrimitive` trait from `living-core`
 //! and emit events consumed by the Metabolism Cycle orchestrator.
 
-pub mod resonance_addressing;
 pub mod fractal_governance;
 pub mod morphogenetic;
-pub mod time_crystal;
 pub mod mycelial_computation;
+pub mod resonance_addressing;
+pub mod time_crystal;
 
-pub use resonance_addressing::ResonanceAddressingEngine;
 pub use fractal_governance::FractalGovernanceEngine;
 pub use morphogenetic::MorphogeneticEngine;
-pub use time_crystal::TimeCrystalEngine;
 pub use mycelial_computation::MycelialComputationEngine;
+pub use resonance_addressing::ResonanceAddressingEngine;
+pub use time_crystal::TimeCrystalEngine;

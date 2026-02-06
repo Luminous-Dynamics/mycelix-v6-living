@@ -3,8 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Master configuration for the Living Protocol Layer.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LivingProtocolConfig {
     /// Metabolism cycle configuration
     pub cycle: CycleConfig,
@@ -31,7 +30,6 @@ pub struct LivingProtocolConfig {
     /// Feature flags
     pub features: FeatureFlags,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CycleConfig {
@@ -273,33 +271,33 @@ impl Default for DreamingConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureFlags {
     // Tier 1 (always on)
-    pub metabolic_trust: bool,       // [3]
-    pub temporal_k_vector: bool,     // [5]
-    pub negative_capability: bool,   // [10]
-    pub silence_as_signal: bool,     // [11]
-    pub beauty_as_validity: bool,    // [12]
-    pub liminality: bool,            // [15]
+    pub metabolic_trust: bool,     // [3]
+    pub temporal_k_vector: bool,   // [5]
+    pub negative_capability: bool, // [10]
+    pub silence_as_signal: bool,   // [11]
+    pub beauty_as_validity: bool,  // [12]
+    pub liminality: bool,          // [15]
 
     // Tier 2 (default on)
-    pub composting: bool,            // [1]
-    pub wound_healing: bool,         // [2]
-    pub kenosis: bool,               // [4]
-    pub shadow_integration: bool,    // [9]
-    pub entangled_pairs: bool,       // [13]
-    pub resonance_addressing: bool,  // [17]
-    pub fractal_governance: bool,    // [18]
-    pub morphogenetic_fields: bool,  // [19]
+    pub composting: bool,           // [1]
+    pub wound_healing: bool,        // [2]
+    pub kenosis: bool,              // [4]
+    pub shadow_integration: bool,   // [9]
+    pub entangled_pairs: bool,      // [13]
+    pub resonance_addressing: bool, // [17]
+    pub fractal_governance: bool,   // [18]
+    pub morphogenetic_fields: bool, // [19]
 
     // Tier 3 (experimental)
-    pub field_interference: bool,    // [6]
-    pub collective_dreaming: bool,   // [7]
-    pub eros_attractor: bool,        // [14]
-    pub time_crystal: bool,          // [20]
-    pub mycelial_computation: bool,  // [21]
+    pub field_interference: bool,   // [6]
+    pub collective_dreaming: bool,  // [7]
+    pub eros_attractor: bool,       // [14]
+    pub time_crystal: bool,         // [20]
+    pub mycelial_computation: bool, // [21]
 
     // Tier 4 (aspirational)
-    pub emergent_personhood: bool,   // [8]
-    pub inter_species: bool,         // [16]
+    pub emergent_personhood: bool, // [8]
+    pub inter_species: bool,       // [16]
 }
 
 impl Default for FeatureFlags {

@@ -41,12 +41,12 @@ use std::sync::Arc;
 use chrono::Utc;
 use uuid::Uuid;
 
-use living_core::{
-    CyclePhase, FieldType, Gate1Check, Gate2Warning, LivingProtocolEvent,
-    MorphogeneticField, MorphogeneticFieldUpdatedEvent, EventBus,
-};
+use living_core::error::LivingResult;
 use living_core::traits::{LivingPrimitive, PrimitiveModule};
-use living_core::error::{LivingResult};
+use living_core::{
+    CyclePhase, EventBus, FieldType, Gate1Check, Gate2Warning, LivingProtocolEvent,
+    MorphogeneticField, MorphogeneticFieldUpdatedEvent,
+};
 
 // =============================================================================
 // Morphogenetic Engine
@@ -130,9 +130,10 @@ impl MorphogeneticEngine {
             timestamp: Utc::now(),
         };
 
-        self.event_bus.publish(LivingProtocolEvent::MorphogeneticFieldUpdated(
-            event.clone(),
-        ));
+        self.event_bus
+            .publish(LivingProtocolEvent::MorphogeneticFieldUpdated(
+                event.clone(),
+            ));
 
         tracing::debug!(
             field_id = %field_id,
@@ -154,11 +155,7 @@ impl MorphogeneticEngine {
     /// - **Repelling** fields push away from the origin (positive gradient).
     /// - **Guiding** fields point in a fixed direction scaled by strength.
     /// - **Containing** fields push inward when position exceeds unit boundary.
-    pub fn compute_gradient(
-        &self,
-        field_id: &str,
-        position: &[f64],
-    ) -> Vec<f64> {
+    pub fn compute_gradient(&self, field_id: &str, position: &[f64]) -> Vec<f64> {
         let field = match self.fields.get(field_id) {
             Some(f) => f,
             None => return vec![0.0; position.len()],
@@ -174,10 +171,7 @@ impl MorphogeneticEngine {
                 if magnitude < f64::EPSILON {
                     vec![0.0; dims]
                 } else {
-                    position
-                        .iter()
-                        .map(|v| -strength * v / magnitude)
-                        .collect()
+                    position.iter().map(|v| -strength * v / magnitude).collect()
                 }
             }
             FieldType::Repelling => {
@@ -186,10 +180,7 @@ impl MorphogeneticEngine {
                 if magnitude < f64::EPSILON {
                     vec![0.0; dims]
                 } else {
-                    position
-                        .iter()
-                        .map(|v| strength * v / magnitude)
-                        .collect()
+                    position.iter().map(|v| strength * v / magnitude).collect()
                 }
             }
             FieldType::Guiding => {
@@ -336,10 +327,7 @@ impl LivingPrimitive for MorphogeneticEngine {
         2
     }
 
-    fn on_phase_change(
-        &mut self,
-        new_phase: CyclePhase,
-    ) -> LivingResult<Vec<LivingProtocolEvent>> {
+    fn on_phase_change(&mut self, new_phase: CyclePhase) -> LivingResult<Vec<LivingProtocolEvent>> {
         // Morphogenetic fields are active during Co-Creation (structure forms)
         // and Composting (old structures decay).
         self.active = matches!(new_phase, CyclePhase::CoCreation | CyclePhase::Composting);
@@ -359,10 +347,7 @@ impl LivingPrimitive for MorphogeneticEngine {
             // Gate 1: strength always in [0.0, 1.0]
             let in_bounds = field.strength >= 0.0 && field.strength <= 1.0;
             checks.push(Gate1Check {
-                invariant: format!(
-                    "strength in [0.0, 1.0] for field {}",
-                    field.id
-                ),
+                invariant: format!("strength in [0.0, 1.0] for field {}", field.id),
                 passed: in_bounds,
                 details: if in_bounds {
                     None
@@ -443,11 +428,7 @@ mod tests {
     #[test]
     fn test_create_field() {
         let mut engine = make_engine();
-        let field = engine.create_field(
-            FieldType::Attracting,
-            "pattern-123".to_string(),
-            0.8,
-        );
+        let field = engine.create_field(FieldType::Attracting, "pattern-123".to_string(), 0.8);
 
         assert_eq!(field.field_type, FieldType::Attracting);
         assert_eq!(field.strength, 0.8);

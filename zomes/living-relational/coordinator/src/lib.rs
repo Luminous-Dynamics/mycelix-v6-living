@@ -227,3 +227,67 @@ pub fn register_inter_species(input: InterSpeciesInput) -> ExternResult<Record> 
 
     Ok(record)
 }
+
+/// Retrieve all entanglement records linked to the given agent.
+///
+/// Uses GetStrategy::Network to query the DHT for consistency across nodes.
+/// This is critical for multi-node deployments where links may not have
+/// propagated to the local node yet.
+#[hdk_extern]
+pub fn get_entanglements_for_agent(agent: AgentPubKey) -> ExternResult<Vec<Record>> {
+    let links = get_links(
+        LinkQuery::new(agent, LinkTypeFilter::single_type(
+            zome_info()?.id,
+            LinkType(LinkTypes::AgentToEntanglements as u8),
+        )),
+        GetStrategy::Network, // Network for multi-node consistency
+    )?;
+
+    let mut records: Vec<Record> = Vec::new();
+    for link in links {
+        let target = link
+            .target
+            .into_action_hash()
+            .ok_or(wasm_error!(WasmErrorInner::Guest(
+                "Link target is not an ActionHash".to_string()
+            )))?;
+
+        if let Some(record) = get(target, GetOptions::default())? {
+            records.push(record);
+        }
+    }
+
+    Ok(records)
+}
+
+/// Retrieve all liminal records linked to the given agent.
+///
+/// Uses GetStrategy::Network to query the DHT for consistency across nodes.
+/// This is critical for multi-node deployments where links may not have
+/// propagated to the local node yet.
+#[hdk_extern]
+pub fn get_liminal_states_for_agent(agent: AgentPubKey) -> ExternResult<Vec<Record>> {
+    let links = get_links(
+        LinkQuery::new(agent, LinkTypeFilter::single_type(
+            zome_info()?.id,
+            LinkType(LinkTypes::AgentToLiminal as u8),
+        )),
+        GetStrategy::Network, // Network for multi-node consistency
+    )?;
+
+    let mut records: Vec<Record> = Vec::new();
+    for link in links {
+        let target = link
+            .target
+            .into_action_hash()
+            .ok_or(wasm_error!(WasmErrorInner::Guest(
+                "Link target is not an ActionHash".to_string()
+            )))?;
+
+        if let Some(record) = get(target, GetOptions::default())? {
+            records.push(record);
+        }
+    }
+
+    Ok(records)
+}

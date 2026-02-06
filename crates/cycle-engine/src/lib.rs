@@ -26,10 +26,10 @@
 //! - Metrics: phase_transition_count, tick_duration_ms, cycle_completion_time
 //! - Automatic span instrumentation on key scheduler methods
 
+pub mod chaos;
 pub mod engine;
 pub mod phase_handlers;
 pub mod scheduler;
-pub mod chaos;
 
 /// OpenTelemetry observability integration.
 ///

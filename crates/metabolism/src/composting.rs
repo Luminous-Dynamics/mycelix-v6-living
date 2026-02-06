@@ -27,18 +27,16 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::Utc;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use living_core::{
-    CompostableEntity, CompostingRecord, CyclePhase, EntityId,
-    EpistemicClassification, Gate1Check, Gate2Warning, LivingProtocolEvent,
-    Nutrient, EventBus,
-    CompostingStartedEvent, NutrientExtractedEvent, CompostingCompletedEvent,
-    CompostingConfig,
-};
-use living_core::traits::{LivingPrimitive, PrimitiveModule};
 use living_core::error::{LivingProtocolError, LivingResult};
+use living_core::traits::{LivingPrimitive, PrimitiveModule};
+use living_core::{
+    CompostableEntity, CompostingCompletedEvent, CompostingConfig, CompostingRecord,
+    CompostingStartedEvent, CyclePhase, EntityId, EpistemicClassification, EventBus, Gate1Check,
+    Gate2Warning, LivingProtocolEvent, Nutrient, NutrientExtractedEvent,
+};
 
 // =============================================================================
 // Composting Reason
@@ -135,14 +133,15 @@ impl CompostingEngine {
         self.reasons.insert(record_id.clone(), reason);
 
         // Emit event
-        self.event_bus.publish(LivingProtocolEvent::CompostingStarted(
-            CompostingStartedEvent {
-                record_id,
-                entity_type,
-                entity_id,
-                timestamp: now,
-            },
-        ));
+        self.event_bus
+            .publish(LivingProtocolEvent::CompostingStarted(
+                CompostingStartedEvent {
+                    record_id,
+                    entity_type,
+                    entity_id,
+                    timestamp: now,
+                },
+            ));
 
         Ok(record)
     }
@@ -201,13 +200,14 @@ impl CompostingEngine {
         record.decomposition_progress = (current_count / max).clamp(0.0, 1.0);
 
         // Emit event
-        self.event_bus.publish(LivingProtocolEvent::NutrientExtracted(
-            NutrientExtractedEvent {
-                record_id: record_id.to_string(),
-                nutrient: nutrient.clone(),
-                timestamp: now,
-            },
-        ));
+        self.event_bus
+            .publish(LivingProtocolEvent::NutrientExtracted(
+                NutrientExtractedEvent {
+                    record_id: record_id.to_string(),
+                    nutrient: nutrient.clone(),
+                    timestamp: now,
+                },
+            ));
 
         Ok(nutrient)
     }
@@ -238,14 +238,15 @@ impl CompostingEngine {
         let nutrients = record.nutrients.clone();
 
         // Emit event
-        self.event_bus.publish(LivingProtocolEvent::CompostingCompleted(
-            CompostingCompletedEvent {
-                record_id: record_id.to_string(),
-                entity_id: record.entity_id.clone(),
-                total_nutrients: nutrients.len(),
-                timestamp: now,
-            },
-        ));
+        self.event_bus
+            .publish(LivingProtocolEvent::CompostingCompleted(
+                CompostingCompletedEvent {
+                    record_id: record_id.to_string(),
+                    entity_id: record.entity_id.clone(),
+                    total_nutrients: nutrients.len(),
+                    timestamp: now,
+                },
+            ));
 
         tracing::info!(
             record_id = %record_id,
@@ -303,10 +304,7 @@ impl CompostingEngine {
     ) -> bool {
         // Warn if composting a FailedProposal with an "Other" reason
         // (may indicate healthy entity being composted prematurely)
-        matches!(
-            (entity_type, reason),
-            (_, CompostingReason::Other(_))
-        )
+        matches!((entity_type, reason), (_, CompostingReason::Other(_)))
     }
 }
 
@@ -331,10 +329,7 @@ impl LivingPrimitive for CompostingEngine {
         2
     }
 
-    fn on_phase_change(
-        &mut self,
-        new_phase: CyclePhase,
-    ) -> LivingResult<Vec<LivingProtocolEvent>> {
+    fn on_phase_change(&mut self, new_phase: CyclePhase) -> LivingResult<Vec<LivingProtocolEvent>> {
         self.active = new_phase == CyclePhase::Composting;
         Ok(Vec::new())
     }
@@ -368,10 +363,7 @@ impl LivingPrimitive for CompostingEngine {
             if record.completed.is_some() {
                 let at_one = (record.decomposition_progress - 1.0).abs() < f64::EPSILON;
                 checks.push(Gate1Check {
-                    invariant: format!(
-                        "completed record {} has progress == 1.0",
-                        record.id
-                    ),
+                    invariant: format!("completed record {} has progress == 1.0", record.id),
                     passed: at_one,
                     details: if at_one {
                         None
@@ -456,9 +448,7 @@ impl LivingPrimitive for CompostingEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use living_core::{
-        EpistemicTier, InMemoryEventBus, MaterialityTier, NormativeTier,
-    };
+    use living_core::{EpistemicTier, InMemoryEventBus, MaterialityTier, NormativeTier};
     use proptest::prelude::*;
 
     fn test_classification() -> EpistemicClassification {
@@ -575,11 +565,8 @@ mod tests {
 
         engine.complete_composting(&record.id).unwrap();
 
-        let result = engine.extract_nutrient(
-            &record.id,
-            "too late".to_string(),
-            test_classification(),
-        );
+        let result =
+            engine.extract_nutrient(&record.id, "too late".to_string(), test_classification());
         assert!(result.is_err());
     }
 
@@ -707,7 +694,10 @@ mod tests {
             .unwrap();
 
         let checks = engine.gate1_check();
-        assert!(checks.iter().all(|c| c.passed), "All Gate 1 checks should pass");
+        assert!(
+            checks.iter().all(|c| c.passed),
+            "All Gate 1 checks should pass"
+        );
     }
 
     #[test]

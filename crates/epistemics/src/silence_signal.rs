@@ -33,8 +33,7 @@ use sha2::{Digest, Sha256};
 use living_core::{
     CyclePhase, Did, EpistemicClassification, EpistemicTier, Gate1Check, Gate2Warning,
     LivingPrimitive, LivingProtocolEvent, LivingResult, MaterialityTier, NormativeTier,
-    PrimitiveModule, PresenceProof, SilenceClassification, SilenceDetectedEvent,
-    SilenceRecord,
+    PresenceProof, PrimitiveModule, SilenceClassification, SilenceDetectedEvent, SilenceRecord,
 };
 
 // =============================================================================
@@ -113,10 +112,7 @@ impl SilenceSignalEngine {
     /// validation.
     pub fn submit_heartbeat(&mut self, agent_did: &str, proof: PresenceProof) -> bool {
         if !self.validate_presence_proof(&proof) {
-            tracing::warn!(
-                agent_did = agent_did,
-                "Rejected invalid PresenceProof"
-            );
+            tracing::warn!(agent_did = agent_did, "Rejected invalid PresenceProof");
             return false;
         }
 
@@ -314,11 +310,7 @@ impl SilenceSignalEngine {
     /// - If the agent has high heartbeat frequency but no speech: `Contemplative`
     /// - If the agent has very few heartbeats overall: `Unknown`
     /// - Otherwise: `DeliberateWithholding`
-    pub fn classify_silence(
-        &self,
-        agent_did: &str,
-        topic: &str,
-    ) -> SilenceClassification {
+    pub fn classify_silence(&self, agent_did: &str, topic: &str) -> SilenceClassification {
         let now = Utc::now();
         let recent_cutoff = now - Duration::hours(self.heartbeat_expiry_hours);
 
@@ -326,7 +318,12 @@ impl SilenceSignalEngine {
         let heartbeat_count = self
             .presence_registry
             .get(agent_did)
-            .map(|proofs| proofs.iter().filter(|p| p.timestamp > recent_cutoff).count())
+            .map(|proofs| {
+                proofs
+                    .iter()
+                    .filter(|p| p.timestamp > recent_cutoff)
+                    .count()
+            })
             .unwrap_or(0);
 
         if heartbeat_count < 2 {
@@ -387,10 +384,7 @@ impl SilenceSignalEngine {
     }
 
     /// Create a valid PresenceProof for testing/internal use.
-    pub fn create_presence_proof(
-        agent_did: &str,
-        timestamp: DateTime<Utc>,
-    ) -> PresenceProof {
+    pub fn create_presence_proof(agent_did: &str, timestamp: DateTime<Utc>) -> PresenceProof {
         let hash = Self::compute_heartbeat_hash(agent_did, timestamp);
         PresenceProof {
             agent_did: agent_did.to_string(),
@@ -405,8 +399,8 @@ impl SilenceSignalEngine {
     pub fn classification() -> EpistemicClassification {
         EpistemicClassification {
             e: EpistemicTier::PrivatelyVerifiable, // E2
-            n: NormativeTier::Communal,             // N1
-            m: MaterialityTier::Temporal,           // M1
+            n: NormativeTier::Communal,            // N1
+            m: MaterialityTier::Temporal,          // M1
         }
     }
 }
@@ -472,9 +466,7 @@ impl LivingPrimitive for SilenceSignalEngine {
         // Warn about large-scale silence (many agents silent on the same topic).
         let mut topic_silence_counts: HashMap<&str, usize> = HashMap::new();
         for record in &self.silence_records {
-            *topic_silence_counts
-                .entry(&record.topic)
-                .or_insert(0) += 1;
+            *topic_silence_counts.entry(&record.topic).or_insert(0) += 1;
         }
 
         for (topic, count) in &topic_silence_counts {
@@ -530,7 +522,10 @@ mod tests {
         let mut engine = SilenceSignalEngine::new();
         let proof = make_proof("did:agent:alice");
         assert!(engine.submit_heartbeat("did:agent:alice", proof));
-        assert_eq!(engine.get_presence_status("did:agent:alice"), PresenceStatus::Silent);
+        assert_eq!(
+            engine.get_presence_status("did:agent:alice"),
+            PresenceStatus::Silent
+        );
     }
 
     #[test]
@@ -641,9 +636,12 @@ mod tests {
         engine.record_speech("did:agent:bob", "governance");
 
         // Register the topic so it has an active_since before Alice's silence period.
-        engine.topic_activity.entry("governance".to_string()).and_modify(|a| {
-            a.active_since = past;
-        });
+        engine
+            .topic_activity
+            .entry("governance".to_string())
+            .and_modify(|a| {
+                a.active_since = past;
+            });
 
         // Detect silences with min 24 hours.
         let events = engine.detect_silences("governance", 24);

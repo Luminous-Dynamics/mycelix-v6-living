@@ -30,10 +30,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use living_core::{
-    CyclePhase, EpistemicClassification, EpistemicTier, Gate1Check, Gate2Warning,
-    LivingPrimitive, LivingProtocolEvent, LivingResult,
-    MaterialityTier, NormativeTier, PrimitiveModule, ShadowConfig, ShadowRecord,
-    ShadowSurfacedEvent,
+    CyclePhase, EpistemicClassification, EpistemicTier, Gate1Check, Gate2Warning, LivingPrimitive,
+    LivingProtocolEvent, LivingResult, MaterialityTier, NormativeTier, PrimitiveModule,
+    ShadowConfig, ShadowRecord, ShadowSurfacedEvent,
 };
 
 // =============================================================================
@@ -260,8 +259,8 @@ impl ShadowIntegrationEngine {
     pub fn classification() -> EpistemicClassification {
         EpistemicClassification {
             e: EpistemicTier::PrivatelyVerifiable, // E2
-            n: NormativeTier::NetworkConsensus,     // N2
-            m: MaterialityTier::Temporal,           // M1
+            n: NormativeTier::NetworkConsensus,    // N2
+            m: MaterialityTier::Temporal,          // M1
         }
     }
 }
@@ -293,10 +292,7 @@ impl LivingPrimitive for ShadowIntegrationEngine {
         2 // Tier 2: default on
     }
 
-    fn on_phase_change(
-        &mut self,
-        new_phase: CyclePhase,
-    ) -> LivingResult<Vec<LivingProtocolEvent>> {
+    fn on_phase_change(&mut self, new_phase: CyclePhase) -> LivingResult<Vec<LivingProtocolEvent>> {
         if new_phase == CyclePhase::Shadow {
             // Use default config and a neutral spectral_k.
             let config = ShadowConfig::default();
@@ -312,10 +308,10 @@ impl LivingPrimitive for ShadowIntegrationEngine {
 
     fn gate1_check(&self) -> Vec<Gate1Check> {
         // Gate 1 invariant: no Gate 1-protected content has been surfaced.
-        let violated = self.surfaced.iter().any(|s| {
-            self.gate1_protected_ids
-                .contains(&s.original_content_id)
-        });
+        let violated = self
+            .surfaced
+            .iter()
+            .any(|s| self.gate1_protected_ids.contains(&s.original_content_id));
 
         vec![Gate1Check {
             invariant: "shadow_never_surfaces_gate1_protected".to_string(),
@@ -398,10 +394,7 @@ mod tests {
 
         // Only the non-protected content should be surfaced.
         assert_eq!(events.len(), 1);
-        assert_eq!(
-            events[0].shadow.original_content_id,
-            "legitimate-dissent"
-        );
+        assert_eq!(events[0].shadow.original_content_id, "legitimate-dissent");
 
         // Verify the Gate 1 check passes.
         let checks = engine.gate1_check();
@@ -464,13 +457,7 @@ mod tests {
         let mut engine = ShadowIntegrationEngine::new();
 
         for i in 0..20 {
-            engine.record_suppression(
-                &format!("content-{}", i),
-                "suppressed",
-                0.8,
-                0.3,
-                false,
-            );
+            engine.record_suppression(&format!("content-{}", i), "suppressed", 0.8, 0.3, false);
         }
 
         let config = default_config(); // max_surface_per_phase = 10
@@ -482,13 +469,7 @@ mod tests {
 
         // Add more content back.
         for i in 20..40 {
-            engine.record_suppression(
-                &format!("content-{}", i),
-                "suppressed",
-                0.8,
-                0.3,
-                false,
-            );
+            engine.record_suppression(&format!("content-{}", i), "suppressed", 0.8, 0.3, false);
         }
 
         // Low spectral_k (anomaly): surface full max.

@@ -35,14 +35,12 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use living_core::{
-    CyclePhase, Did, Gate1Check, Gate2Warning, LivingProtocolEvent,
-    MetabolicTrustScore, EventBus,
-    MetabolicTrustUpdatedEvent,
-    MetabolicTrustConfig,
-};
-use living_core::traits::{LivingPrimitive, PrimitiveModule};
 use living_core::error::LivingResult;
+use living_core::traits::{LivingPrimitive, PrimitiveModule};
+use living_core::{
+    CyclePhase, Did, EventBus, Gate1Check, Gate2Warning, LivingProtocolEvent, MetabolicTrustConfig,
+    MetabolicTrustScore, MetabolicTrustUpdatedEvent,
+};
 
 // =============================================================================
 // Agent Trust State
@@ -192,15 +190,16 @@ impl MetabolicTrustEngine {
             .unwrap_or(0.0);
 
         if (old_score - metabolic_trust).abs() > 0.001 {
-            self.event_bus.publish(LivingProtocolEvent::MetabolicTrustUpdated(
-                MetabolicTrustUpdatedEvent {
-                    agent_did: agent_did.to_string(),
-                    old_score,
-                    new_score: metabolic_trust,
-                    components: score.clone(),
-                    timestamp: now,
-                },
-            ));
+            self.event_bus
+                .publish(LivingProtocolEvent::MetabolicTrustUpdated(
+                    MetabolicTrustUpdatedEvent {
+                        agent_did: agent_did.to_string(),
+                        old_score,
+                        new_score: metabolic_trust,
+                        components: score.clone(),
+                        timestamp: now,
+                    },
+                ));
         }
 
         state.last_score = Some(score.clone());
@@ -318,33 +317,27 @@ impl MetabolicTrustEngine {
         if let Some(state) = state {
             // Check 1: Throughput suspiciously high relative to MATL
             if state.throughput > 0.9 && state.matl_composite < 0.3 {
-                concerns.push(
-                    "High throughput with low MATL composite — possible gaming".to_string(),
-                );
+                concerns
+                    .push("High throughput with low MATL composite — possible gaming".to_string());
                 cartel_risk += 0.3;
             }
 
             // Check 2: Very high composting contribution with few actual contributions
             if state.composting_contribution > 0.8 && state.total_nutrients_contributed < 5 {
-                concerns.push(
-                    "High composting score with few actual contributions".to_string(),
-                );
+                concerns.push("High composting score with few actual contributions".to_string());
                 cartel_risk += 0.2;
             }
 
             // Check 3: Perfect resilience with very few recovery events
             if state.resilience > 0.95 && state.recovery_events < 2 {
-                concerns.push(
-                    "Near-perfect resilience with minimal recovery history".to_string(),
-                );
+                concerns.push("Near-perfect resilience with minimal recovery history".to_string());
                 cartel_risk += 0.15;
             }
 
             // Check 4: Monotonically increasing throughput (no natural variance)
             if state.throughput_updates > 10 && state.throughput > 0.95 {
-                concerns.push(
-                    "Sustained near-maximum throughput — possible automation".to_string(),
-                );
+                concerns
+                    .push("Sustained near-maximum throughput — possible automation".to_string());
                 cartel_risk += 0.1;
             }
         }
@@ -360,7 +353,9 @@ impl MetabolicTrustEngine {
 
     /// Get the trust state for a specific agent (for testing/debugging).
     pub fn get_agent_state(&self, agent_did: &str) -> Option<MetabolicTrustScore> {
-        self.agents.get(agent_did).and_then(|s| s.last_score.clone())
+        self.agents
+            .get(agent_did)
+            .and_then(|s| s.last_score.clone())
     }
 
     /// Get total number of tracked agents.
@@ -414,10 +409,7 @@ impl LivingPrimitive for MetabolicTrustEngine {
             for (name, value) in &components {
                 let in_bounds = *value >= 0.0 && *value <= 1.0;
                 checks.push(Gate1Check {
-                    invariant: format!(
-                        "{} in [0.0, 1.0] for agent {}",
-                        name, did
-                    ),
+                    invariant: format!("{} in [0.0, 1.0] for agent {}", name, did),
                     passed: in_bounds,
                     details: if in_bounds {
                         None
@@ -429,13 +421,9 @@ impl LivingPrimitive for MetabolicTrustEngine {
 
             // Gate 1: final metabolic trust score bounded [0.0, 1.0]
             if let Some(ref score) = state.last_score {
-                let in_bounds =
-                    score.metabolic_trust >= 0.0 && score.metabolic_trust <= 1.0;
+                let in_bounds = score.metabolic_trust >= 0.0 && score.metabolic_trust <= 1.0;
                 checks.push(Gate1Check {
-                    invariant: format!(
-                        "metabolic_trust in [0.0, 1.0] for agent {}",
-                        did
-                    ),
+                    invariant: format!("metabolic_trust in [0.0, 1.0] for agent {}", did),
                     passed: in_bounds,
                     details: if in_bounds {
                         None

@@ -18,16 +18,12 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-use living_core::{
-    Did, KVectorSignature,
-    FieldInterference, OverallInterferenceType,
-    FieldInterferenceDetectedEvent, InterferenceType,
-    LivingProtocolEvent,
-    Gate1Check, Gate2Warning,
-    CyclePhase,
-    LivingProtocolError, LivingResult,
-};
 use living_core::traits::{LivingPrimitive, PrimitiveModule};
+use living_core::{
+    CyclePhase, Did, FieldInterference, FieldInterferenceDetectedEvent, Gate1Check, Gate2Warning,
+    InterferenceType, KVectorSignature, LivingProtocolError, LivingProtocolEvent, LivingResult,
+    OverallInterferenceType,
+};
 
 // =============================================================================
 // GroupInterference
@@ -168,8 +164,7 @@ impl FieldInterferenceService {
 
         for i in 0..n {
             for j in (i + 1)..n {
-                let interference =
-                    FieldInterference::compute(&agents[i].1, &agents[j].1);
+                let interference = FieldInterference::compute(&agents[i].1, &agents[j].1);
 
                 match interference.overall_type {
                     OverallInterferenceType::Constructive => constructive_count += 1,
@@ -239,8 +234,7 @@ impl FieldInterferenceService {
 
         for i in 0..agents.len() {
             for j in (i + 1)..agents.len() {
-                let interference =
-                    FieldInterference::compute(&agents[i].1, &agents[j].1);
+                let interference = FieldInterference::compute(&agents[i].1, &agents[j].1);
 
                 if interference.overall_type == OverallInterferenceType::Constructive
                     && interference.amplitude >= min_amplitude
@@ -277,8 +271,7 @@ impl FieldInterferenceService {
 
         for i in 0..agents.len() {
             for j in (i + 1)..agents.len() {
-                let interference =
-                    FieldInterference::compute(&agents[i].1, &agents[j].1);
+                let interference = FieldInterference::compute(&agents[i].1, &agents[j].1);
 
                 if interference.overall_type == OverallInterferenceType::Destructive
                     && interference.amplitude >= min_amplitude
@@ -320,8 +313,7 @@ impl FieldInterferenceService {
 
         for i in 0..n {
             for j in (i + 1)..n {
-                let mut interference =
-                    FieldInterference::compute(&agents[i].1, &agents[j].1);
+                let mut interference = FieldInterference::compute(&agents[i].1, &agents[j].1);
                 interference.agents = vec![agents[i].0.clone(), agents[j].0.clone()];
                 matrix[i * n + j] = Some(interference);
             }
@@ -498,10 +490,7 @@ mod tests {
     #[test]
     fn test_find_destructive_pairs_none_when_all_positive() {
         let mut service = FieldInterferenceService::new();
-        let agents = vec![
-            make_agent("did:a", [0.5; 8]),
-            make_agent("did:b", [0.6; 8]),
-        ];
+        let agents = vec![make_agent("did:a", [0.5; 8]), make_agent("did:b", [0.6; 8])];
 
         let pairs = service.find_destructive_pairs(&agents, 0.0);
         // All positive values -> constructive, no destructive
@@ -536,10 +525,7 @@ mod tests {
     #[test]
     fn test_interference_map_get_by_did() {
         let mut service = FieldInterferenceService::new();
-        let agents = vec![
-            make_agent("did:a", [0.5; 8]),
-            make_agent("did:b", [0.6; 8]),
-        ];
+        let agents = vec![make_agent("did:a", [0.5; 8]), make_agent("did:b", [0.6; 8])];
 
         let map = service.network_interference_map(&agents).unwrap();
         let result = map.get_by_did(&"did:a".to_string(), &"did:b".to_string());
@@ -583,6 +569,10 @@ mod tests {
 
         let group = service.compute_group(&agents).unwrap();
         let total = group.constructive_ratio + group.destructive_ratio + group.mixed_ratio;
-        assert!((total - 1.0).abs() < 1e-10, "Ratios should sum to 1.0, got {}", total);
+        assert!(
+            (total - 1.0).abs() < 1e-10,
+            "Ratios should sum to 1.0, got {}",
+            total
+        );
     }
 }

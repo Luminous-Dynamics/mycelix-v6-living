@@ -1,8 +1,8 @@
 //! Events emitted by all Living Protocol primitives.
 //! The Metabolism Cycle orchestrator listens to these events to coordinate behavior.
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use crate::types::*;
 
@@ -422,9 +422,12 @@ pub trait EventBus: Send + Sync {
     fn subscribe(&self, handler: Box<dyn Fn(&LivingProtocolEvent) + Send + Sync>);
 }
 
+/// Type alias for event handler functions to reduce type complexity.
+type EventHandler = Box<dyn Fn(&LivingProtocolEvent) + Send + Sync>;
+
 /// Simple in-memory event bus for testing.
 pub struct InMemoryEventBus {
-    handlers: std::sync::Mutex<Vec<Box<dyn Fn(&LivingProtocolEvent) + Send + Sync>>>,
+    handlers: std::sync::Mutex<Vec<EventHandler>>,
     history: std::sync::Mutex<Vec<LivingProtocolEvent>>,
 }
 

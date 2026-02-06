@@ -48,3 +48,7 @@ criterion = { workspace = true }
 name = "cycle_engine"
 harness = false
 path = "../../benches/cycle_engine.rs"
+
+[[test]]
+name = "cycle_engine_chaos"
+path = "../../tests/chaos/cycle_engine_chaos.rs"

@@ -16,10 +16,10 @@
 
 #[cfg(test)]
 mod fuzz_tests {
-    use proptest::prelude::*;
-    use living_core::CyclePhase;
+    use crate::chaos::{saturating_add_duration, saturating_time_acceleration};
     use crate::scheduler::CycleEngineBuilder;
-    use crate::chaos::{saturating_time_acceleration, saturating_add_duration};
+    use living_core::CyclePhase;
+    use proptest::prelude::*;
 
     // =========================================================================
     // Arbitrary implementations for proptest

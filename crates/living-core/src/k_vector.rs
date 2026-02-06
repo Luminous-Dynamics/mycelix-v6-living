@@ -1,8 +1,8 @@
 //! Extended K-Vector types for v6.0 Living Protocol Layer.
 //! Adds temporal derivatives, field interference, and resonance addressing.
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use crate::types::SignatureBytes;
 
@@ -38,7 +38,14 @@ impl KVectorSignature {
     /// Get K-Vector as an array of f64.
     pub fn as_array(&self) -> [f64; 8] {
         [
-            self.k_r, self.k_a, self.k_i, self.k_p, self.k_m, self.k_s, self.k_h, self.k_topo,
+            self.k_r,
+            self.k_a,
+            self.k_i,
+            self.k_p,
+            self.k_m,
+            self.k_s,
+            self.k_h,
+            self.k_topo,
         ]
     }
 
@@ -159,13 +166,13 @@ impl TemporalKVector {
         let old_velocity = self.velocity;
 
         // Compute velocity (first derivative)
-        for i in 0..8 {
-            self.velocity[i] = (new[i] - old[i]) / dt_days;
+        for (i, (new_val, old_val)) in new.iter().zip(old.iter()).enumerate() {
+            self.velocity[i] = (new_val - old_val) / dt_days;
         }
 
         // Compute acceleration (second derivative)
-        for i in 0..8 {
-            self.acceleration[i] = (self.velocity[i] - old_velocity[i]) / dt_days;
+        for (i, old_vel) in old_velocity.iter().enumerate() {
+            self.acceleration[i] = (self.velocity[i] - old_vel) / dt_days;
         }
 
         // Push old to history
@@ -376,10 +383,8 @@ mod tests {
         );
         let mut temporal = TemporalKVector::new(initial, 100);
 
-        let updated = KVectorSignature::from_array(
-            [0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-            Utc::now(),
-        );
+        let updated =
+            KVectorSignature::from_array([0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], Utc::now());
         temporal.update(updated);
 
         // k_r changed by 0.1 in ~1 day, so velocity[0] ≈ 0.1
@@ -396,18 +401,19 @@ mod tests {
         );
         let mut temporal = TemporalKVector::new(initial, 100);
 
-        let updated = KVectorSignature::from_array(
-            [0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-            Utc::now(),
-        );
+        let updated =
+            KVectorSignature::from_array([0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], Utc::now());
         temporal.update(updated);
 
         let predicted = temporal.predict(1.0);
         // predicted = current + velocity * days + 0.5 * acceleration * days^2
         // = 0.6 + 0.1 * 1 + 0.5 * 0.1 * 1 = 0.75
         // (acceleration = (0.1 - 0.0) / 1.0 = 0.1 from single update)
-        assert!(predicted[0] > 0.74 && predicted[0] < 0.76,
-            "predicted[0] = {}", predicted[0]);
+        assert!(
+            predicted[0] > 0.74 && predicted[0] < 0.76,
+            "predicted[0] = {}",
+            predicted[0]
+        );
     }
 
     #[test]
@@ -416,22 +422,21 @@ mod tests {
         let b = sample_kvec([0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6]);
 
         let interference = FieldInterference::compute(&a, &b);
-        assert_eq!(interference.overall_type, OverallInterferenceType::Constructive);
+        assert_eq!(
+            interference.overall_type,
+            OverallInterferenceType::Constructive
+        );
     }
 
     #[test]
     fn test_rate_of_change() {
-        let initial = KVectorSignature::from_array(
-            [0.5; 8],
-            Utc::now() - chrono::Duration::days(1),
-        );
+        let initial =
+            KVectorSignature::from_array([0.5; 8], Utc::now() - chrono::Duration::days(1));
         let mut temporal = TemporalKVector::new(initial, 100);
         assert_eq!(temporal.rate_of_change(), 0.0);
 
-        let updated = KVectorSignature::from_array(
-            [0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-            Utc::now(),
-        );
+        let updated =
+            KVectorSignature::from_array([0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], Utc::now());
         temporal.update(updated);
         assert!(temporal.rate_of_change() > 0.0);
     }

@@ -24,5 +24,8 @@
 mod rpc;
 mod server;
 
-pub use rpc::{RpcError, RpcRequest, RpcResponse, RPC_ERROR_INTERNAL, RPC_ERROR_INVALID_PARAMS, RPC_ERROR_METHOD_NOT_FOUND};
-pub use server::{WebSocketServer, ServerConfig};
+pub use rpc::{
+    RpcError, RpcRequest, RpcResponse, RPC_ERROR_INTERNAL, RPC_ERROR_INVALID_PARAMS,
+    RPC_ERROR_METHOD_NOT_FOUND,
+};
+pub use server::{ServerConfig, WebSocketServer};

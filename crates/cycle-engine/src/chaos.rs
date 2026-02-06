@@ -277,7 +277,9 @@ impl std::fmt::Display for ChaosError {
         match self {
             ChaosError::PanicOnEnter(phase) => write!(f, "Injected panic on entering {:?}", phase),
             ChaosError::PanicOnExit(phase) => write!(f, "Injected panic on exiting {:?}", phase),
-            ChaosError::PanicOnTick(phase) => write!(f, "Injected panic during tick in {:?}", phase),
+            ChaosError::PanicOnTick(phase) => {
+                write!(f, "Injected panic during tick in {:?}", phase)
+            }
             ChaosError::FailedAfterN(n) => write!(f, "Failed after {} operations", n),
             ChaosError::ReentrancyDetected => write!(f, "Callback reentrancy detected"),
             ChaosError::TimeOverflow => write!(f, "Time calculation overflow"),
@@ -327,7 +329,9 @@ impl TransactionalTransition {
 impl Drop for TransactionalTransition {
     fn drop(&mut self) {
         if !self.committed && self.checkpoint.is_some() {
-            tracing::warn!("TransactionalTransition dropped without commit - rollback should be performed");
+            tracing::warn!(
+                "TransactionalTransition dropped without commit - rollback should be performed"
+            );
         }
     }
 }
@@ -340,7 +344,8 @@ pub fn saturating_add_duration(base: DateTime<Utc>, duration: Duration) -> DateT
         // Return a far-future timestamp instead of overflowing
         DateTime::<Utc>::MAX_UTC
     } else {
-        base.checked_add_signed(duration).unwrap_or(DateTime::<Utc>::MAX_UTC)
+        base.checked_add_signed(duration)
+            .unwrap_or(DateTime::<Utc>::MAX_UTC)
     }
 }
 
@@ -380,7 +385,7 @@ mod tests {
         assert!(!injector.should_fail()); // 0
         assert!(!injector.should_fail()); // 1
         assert!(!injector.should_fail()); // 2
-        assert!(injector.should_fail());  // 3 - should fail
+        assert!(injector.should_fail()); // 3 - should fail
     }
 
     #[test]

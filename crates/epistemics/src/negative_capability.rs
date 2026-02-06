@@ -26,10 +26,9 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use living_core::{
-    ClaimId, ClaimStatus, CyclePhase, Did, EpistemicClassification, EpistemicTier,
-    Gate1Check, Gate2Warning, LivingPrimitive, LivingProtocolEvent, LivingResult,
-    MaterialityTier, NormativeTier, PrimitiveModule,
-    ClaimHeldEvent, ClaimReleasedEvent,
+    ClaimHeldEvent, ClaimId, ClaimReleasedEvent, ClaimStatus, CyclePhase, Did,
+    EpistemicClassification, EpistemicTier, Gate1Check, Gate2Warning, LivingPrimitive,
+    LivingProtocolEvent, LivingResult, MaterialityTier, NormativeTier, PrimitiveModule,
 };
 
 // =============================================================================
@@ -149,11 +148,8 @@ impl NegativeCapabilityEngine {
                 "Claim released from uncertainty — voting re-enabled"
             );
 
-            self.released_history.push((
-                claim_id.to_string(),
-                resolution.to_string(),
-                now,
-            ));
+            self.released_history
+                .push((claim_id.to_string(), resolution.to_string(), now));
 
             Some(ClaimReleasedEvent {
                 claim_id: claim_id.to_string(),
@@ -224,13 +220,13 @@ impl NegativeCapabilityEngine {
     ///
     /// Returns `None` if the claim is not held.
     pub fn get_claim_status(&self, claim_id: &str) -> Option<ClaimStatus> {
-        self.held_claims.get(claim_id).map(|held| {
-            ClaimStatus::HeldInUncertainty {
+        self.held_claims
+            .get(claim_id)
+            .map(|held| ClaimStatus::HeldInUncertainty {
                 reason: held.reason.clone(),
                 held_since: held.held_since,
                 earliest_resolution: held.earliest_resolution,
-            }
-        })
+            })
     }
 
     /// Get the number of currently held claims.
@@ -241,9 +237,9 @@ impl NegativeCapabilityEngine {
     /// Epistemic classification for Negative Capability.
     pub fn classification() -> EpistemicClassification {
         EpistemicClassification {
-            e: EpistemicTier::Testimonial,       // E1
-            n: NormativeTier::NetworkConsensus,   // N2
-            m: MaterialityTier::Persistent,       // M2
+            e: EpistemicTier::Testimonial,      // E1
+            n: NormativeTier::NetworkConsensus, // N2
+            m: MaterialityTier::Persistent,     // M2
         }
     }
 }
@@ -275,10 +271,7 @@ impl LivingPrimitive for NegativeCapabilityEngine {
         1 // Tier 1: always on
     }
 
-    fn on_phase_change(
-        &mut self,
-        new_phase: CyclePhase,
-    ) -> LivingResult<Vec<LivingProtocolEvent>> {
+    fn on_phase_change(&mut self, new_phase: CyclePhase) -> LivingResult<Vec<LivingProtocolEvent>> {
         if new_phase == CyclePhase::NegativeCapability {
             tracing::info!(
                 held_count = self.held_claims.len(),
@@ -371,12 +364,7 @@ mod tests {
     #[test]
     fn test_voting_blocked_on_held_claims() {
         let mut engine = NegativeCapabilityEngine::new();
-        engine.hold_in_uncertainty(
-            "claim-1",
-            "Needs more time",
-            7,
-            "did:agent:bob",
-        );
+        engine.hold_in_uncertainty("claim-1", "Needs more time", 7, "did:agent:bob");
 
         // Voting should be blocked on held claims.
         assert!(!engine.can_vote_on("claim-1"));
@@ -389,12 +377,7 @@ mod tests {
     #[test]
     fn test_release_from_uncertainty() {
         let mut engine = NegativeCapabilityEngine::new();
-        engine.hold_in_uncertainty(
-            "claim-1",
-            "Uncertain",
-            7,
-            "did:agent:alice",
-        );
+        engine.hold_in_uncertainty("claim-1", "Uncertain", 7, "did:agent:alice");
 
         assert!(!engine.can_vote_on("claim-1"));
 
@@ -437,12 +420,7 @@ mod tests {
         );
 
         // Insert a recent claim.
-        engine.hold_in_uncertainty(
-            "new-claim",
-            "Fresh question",
-            7,
-            "did:agent:new",
-        );
+        engine.hold_in_uncertainty("new-claim", "Fresh question", 7, "did:agent:new");
 
         // Auto-release with max_hold_days = 90.
         let events = engine.auto_release_expired(90);
@@ -459,12 +437,7 @@ mod tests {
     #[test]
     fn test_get_claim_status() {
         let mut engine = NegativeCapabilityEngine::new();
-        engine.hold_in_uncertainty(
-            "claim-x",
-            "Testing",
-            14,
-            "did:agent:tester",
-        );
+        engine.hold_in_uncertainty("claim-x", "Testing", 14, "did:agent:tester");
 
         let status = engine.get_claim_status("claim-x");
         assert!(status.is_some());

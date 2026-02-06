@@ -42,16 +42,14 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use living_core::{
-    CyclePhase, Did, Gate1Check, Gate2Warning, LivingProtocolEvent,
-    RestitutionRequirement, ScarTissue, WoundPhase, WoundRecord, WoundSeverity,
-    EventBus,
-    WoundCreatedEvent, WoundPhaseAdvancedEvent, RestitutionFulfilledEvent,
-    ScarTissueFormedEvent,
-    WoundHealingConfig,
-};
-use living_core::traits::{LivingPrimitive, PrimitiveModule};
 use living_core::error::{LivingProtocolError, LivingResult};
+use living_core::traits::{LivingPrimitive, PrimitiveModule};
+use living_core::{
+    CyclePhase, Did, EventBus, Gate1Check, Gate2Warning, LivingProtocolEvent,
+    RestitutionFulfilledEvent, RestitutionRequirement, ScarTissue, ScarTissueFormedEvent,
+    WoundCreatedEvent, WoundHealingConfig, WoundPhase, WoundPhaseAdvancedEvent, WoundRecord,
+    WoundSeverity,
+};
 
 // =============================================================================
 // Restitution Actions
@@ -163,7 +161,7 @@ impl WoundHealingEngine {
         let record = WoundRecord {
             id: wound_id.clone(),
             agent_did: agent_did.clone(),
-            severity: severity,
+            severity,
             cause: cause.clone(),
             // Hemostasis is automatic/immediate
             phase: WoundPhase::Hemostasis,
@@ -180,15 +178,14 @@ impl WoundHealingEngine {
             .push(wound_id.clone());
 
         // Emit event
-        self.event_bus.publish(LivingProtocolEvent::WoundCreated(
-            WoundCreatedEvent {
+        self.event_bus
+            .publish(LivingProtocolEvent::WoundCreated(WoundCreatedEvent {
                 wound_id,
                 agent_did,
                 severity,
                 cause,
                 timestamp: now,
-            },
-        ));
+            }));
 
         Ok(record)
     }
@@ -204,9 +201,10 @@ impl WoundHealingEngine {
     ///
     /// Any attempt to skip or reverse a phase returns `WoundPhaseViolation`.
     pub fn advance_phase(&mut self, wound_id: &str) -> LivingResult<WoundPhase> {
-        let wound = self.wounds.get_mut(wound_id).ok_or_else(|| {
-            LivingProtocolError::AgentNotFound(wound_id.to_string())
-        })?;
+        let wound = self
+            .wounds
+            .get_mut(wound_id)
+            .ok_or_else(|| LivingProtocolError::AgentNotFound(wound_id.to_string()))?;
 
         let current_phase = wound.phase;
 
@@ -256,15 +254,16 @@ impl WoundHealingEngine {
         wound.phase_history.push((next_phase, now));
 
         // Emit event
-        self.event_bus.publish(LivingProtocolEvent::WoundPhaseAdvanced(
-            WoundPhaseAdvancedEvent {
-                wound_id: wound_id.to_string(),
-                agent_did: wound.agent_did.clone(),
-                from,
-                to: next_phase,
-                timestamp: now,
-            },
-        ));
+        self.event_bus
+            .publish(LivingProtocolEvent::WoundPhaseAdvanced(
+                WoundPhaseAdvancedEvent {
+                    wound_id: wound_id.to_string(),
+                    agent_did: wound.agent_did.clone(),
+                    from,
+                    to: next_phase,
+                    timestamp: now,
+                },
+            ));
 
         tracing::info!(
             wound_id = %wound_id,
@@ -284,9 +283,10 @@ impl WoundHealingEngine {
         wound_id: &str,
         actions: Vec<RestitutionAction>,
     ) -> LivingResult<bool> {
-        let wound = self.wounds.get_mut(wound_id).ok_or_else(|| {
-            LivingProtocolError::AgentNotFound(wound_id.to_string())
-        })?;
+        let wound = self
+            .wounds
+            .get_mut(wound_id)
+            .ok_or_else(|| LivingProtocolError::AgentNotFound(wound_id.to_string()))?;
 
         if wound.phase != WoundPhase::Proliferation {
             tracing::warn!(
@@ -306,7 +306,9 @@ impl WoundHealingEngine {
 
         // Mark restitution actions as completed
         for action in &actions {
-            restitution.actions_required.push(action.description.clone());
+            restitution
+                .actions_required
+                .push(action.description.clone());
         }
 
         // Consider restitution fulfilled if at least one action has been submitted
@@ -315,14 +317,15 @@ impl WoundHealingEngine {
             restitution.fulfilled = true;
 
             let now = Utc::now();
-            self.event_bus.publish(LivingProtocolEvent::RestitutionFulfilled(
-                RestitutionFulfilledEvent {
-                    wound_id: wound_id.to_string(),
-                    agent_did: wound.agent_did.clone(),
-                    restitution: restitution.clone(),
-                    timestamp: now,
-                },
-            ));
+            self.event_bus
+                .publish(LivingProtocolEvent::RestitutionFulfilled(
+                    RestitutionFulfilledEvent {
+                        wound_id: wound_id.to_string(),
+                        agent_did: wound.agent_did.clone(),
+                        restitution: restitution.clone(),
+                        timestamp: now,
+                    },
+                ));
         }
 
         Ok(restitution.fulfilled)
@@ -334,9 +337,10 @@ impl WoundHealingEngine {
     /// The `strength_multiplier` is always > 1.0, meaning the healed area
     /// is stronger than the original.
     pub fn form_scar_tissue(&mut self, wound_id: &str) -> LivingResult<ScarTissue> {
-        let wound = self.wounds.get_mut(wound_id).ok_or_else(|| {
-            LivingProtocolError::AgentNotFound(wound_id.to_string())
-        })?;
+        let wound = self
+            .wounds
+            .get_mut(wound_id)
+            .ok_or_else(|| LivingProtocolError::AgentNotFound(wound_id.to_string()))?;
 
         if wound.phase != WoundPhase::Remodeling && wound.phase != WoundPhase::Healed {
             return Err(LivingProtocolError::WoundPhaseViolation {
@@ -368,14 +372,15 @@ impl WoundHealingEngine {
         wound.scar_tissue = Some(scar.clone());
 
         // Emit event
-        self.event_bus.publish(LivingProtocolEvent::ScarTissueFormed(
-            ScarTissueFormedEvent {
-                wound_id: wound_id.to_string(),
-                agent_did: wound.agent_did.clone(),
-                scar: scar.clone(),
-                timestamp: now,
-            },
-        ));
+        self.event_bus
+            .publish(LivingProtocolEvent::ScarTissueFormed(
+                ScarTissueFormedEvent {
+                    wound_id: wound_id.to_string(),
+                    agent_did: wound.agent_did.clone(),
+                    scar: scar.clone(),
+                    timestamp: now,
+                },
+            ));
 
         tracing::info!(
             wound_id = %wound_id,
@@ -431,9 +436,10 @@ impl WoundHealingEngine {
     /// Returns the final wound record.
     pub fn heal_fully(&mut self, wound_id: &str) -> LivingResult<WoundRecord> {
         loop {
-            let wound = self.wounds.get(wound_id).ok_or_else(|| {
-                LivingProtocolError::AgentNotFound(wound_id.to_string())
-            })?;
+            let wound = self
+                .wounds
+                .get(wound_id)
+                .ok_or_else(|| LivingProtocolError::AgentNotFound(wound_id.to_string()))?;
             if wound.phase == WoundPhase::Healed {
                 break;
             }
@@ -549,10 +555,7 @@ impl LivingPrimitive for WoundHealingEngine {
                     }
                 }
                 checks.push(Gate1Check {
-                    invariant: format!(
-                        "forward-only phase transitions for wound {}",
-                        wound.id
-                    ),
+                    invariant: format!("forward-only phase transitions for wound {}", wound.id),
                     passed: forward_only,
                     details: if forward_only {
                         None
@@ -566,10 +569,7 @@ impl LivingPrimitive for WoundHealingEngine {
             if let Some(ref scar) = wound.scar_tissue {
                 let valid = scar.strength_multiplier > 1.0;
                 checks.push(Gate1Check {
-                    invariant: format!(
-                        "scar tissue strength > 1.0 for wound {}",
-                        wound.id
-                    ),
+                    invariant: format!("scar tissue strength > 1.0 for wound {}", wound.id),
                     passed: valid,
                     details: if valid {
                         None
@@ -841,7 +841,11 @@ mod tests {
 
         // Minor wound
         let minor = engine
-            .create_wound("did:a".to_string(), WoundSeverity::Minor, "minor".to_string())
+            .create_wound(
+                "did:a".to_string(),
+                WoundSeverity::Minor,
+                "minor".to_string(),
+            )
             .unwrap();
         for _ in 0..3 {
             engine.advance_phase(&minor.id).unwrap();
@@ -850,7 +854,11 @@ mod tests {
 
         // Critical wound
         let critical = engine
-            .create_wound("did:b".to_string(), WoundSeverity::Critical, "critical".to_string())
+            .create_wound(
+                "did:b".to_string(),
+                WoundSeverity::Critical,
+                "critical".to_string(),
+            )
             .unwrap();
         for _ in 0..3 {
             engine.advance_phase(&critical.id).unwrap();
@@ -886,10 +894,18 @@ mod tests {
             .create_wound(agent.clone(), WoundSeverity::Minor, "issue 1".to_string())
             .unwrap();
         engine
-            .create_wound(agent.clone(), WoundSeverity::Moderate, "issue 2".to_string())
+            .create_wound(
+                agent.clone(),
+                WoundSeverity::Moderate,
+                "issue 2".to_string(),
+            )
             .unwrap();
         engine
-            .create_wound("did:mycelix:agent2".to_string(), WoundSeverity::Severe, "other".to_string())
+            .create_wound(
+                "did:mycelix:agent2".to_string(),
+                WoundSeverity::Severe,
+                "other".to_string(),
+            )
             .unwrap();
 
         let agent1_wounds = engine.get_wounds_for_agent(&agent);
@@ -919,7 +935,7 @@ mod tests {
         let (min, max) = estimated_healing_cycles(&WoundSeverity::Minor);
         assert_eq!((min, max), (1, 1));
 
-        let (min, max) = estimated_healing_cycles(&WoundSeverity::Critical);
+        let (min, _max) = estimated_healing_cycles(&WoundSeverity::Critical);
         assert!(min >= 7);
     }
 
@@ -974,7 +990,11 @@ mod tests {
     fn test_gate1_forward_only_passes() {
         let mut engine = make_engine();
         let wound = engine
-            .create_wound("did:a".to_string(), WoundSeverity::Minor, "test".to_string())
+            .create_wound(
+                "did:a".to_string(),
+                WoundSeverity::Minor,
+                "test".to_string(),
+            )
             .unwrap();
         engine.advance_phase(&wound.id).unwrap();
         engine.advance_phase(&wound.id).unwrap();
@@ -1023,7 +1043,11 @@ mod tests {
             .create_wound("did:a".to_string(), WoundSeverity::Minor, "a".to_string())
             .unwrap();
         engine
-            .create_wound("did:b".to_string(), WoundSeverity::Critical, "b".to_string())
+            .create_wound(
+                "did:b".to_string(),
+                WoundSeverity::Critical,
+                "b".to_string(),
+            )
             .unwrap();
 
         let metrics = engine.collect_metrics();

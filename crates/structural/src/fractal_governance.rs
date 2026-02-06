@@ -41,12 +41,12 @@ use std::sync::Arc;
 use chrono::Utc;
 use uuid::Uuid;
 
-use living_core::{
-    CyclePhase, DecisionMechanism, FractalGovernancePattern, FractalPatternReplicatedEvent,
-    Gate1Check, Gate2Warning, GovernanceScale, LivingProtocolEvent, EventBus,
-};
-use living_core::traits::{LivingPrimitive, PrimitiveModule};
 use living_core::error::{LivingProtocolError, LivingResult};
+use living_core::traits::{LivingPrimitive, PrimitiveModule};
+use living_core::{
+    CyclePhase, DecisionMechanism, EventBus, FractalGovernancePattern,
+    FractalPatternReplicatedEvent, Gate1Check, Gate2Warning, GovernanceScale, LivingProtocolEvent,
+};
 
 // =============================================================================
 // Fractal Governance Engine
@@ -131,10 +131,7 @@ impl FractalGovernanceEngine {
         parent_id: &str,
     ) -> LivingResult<FractalPatternReplicatedEvent> {
         let parent = self.patterns.get(parent_id).ok_or_else(|| {
-            LivingProtocolError::FractalScaleMismatch(format!(
-                "Pattern {} not found",
-                parent_id
-            ))
+            LivingProtocolError::FractalScaleMismatch(format!("Pattern {} not found", parent_id))
         })?;
 
         let parent_idx = self.scale_index(&parent.scale).ok_or_else(|| {
@@ -207,10 +204,7 @@ impl FractalGovernanceEngine {
         child_id: &str,
     ) -> LivingResult<FractalPatternReplicatedEvent> {
         let child = self.patterns.get(child_id).ok_or_else(|| {
-            LivingProtocolError::FractalScaleMismatch(format!(
-                "Pattern {} not found",
-                child_id
-            ))
+            LivingProtocolError::FractalScaleMismatch(format!("Pattern {} not found", child_id))
         })?;
 
         let child_idx = self.scale_index(&child.scale).ok_or_else(|| {
@@ -245,10 +239,7 @@ impl FractalGovernanceEngine {
         };
 
         // Update child to record parent
-        self.patterns
-            .get_mut(child_id)
-            .unwrap()
-            .parent_pattern_id = Some(parent_id.clone());
+        self.patterns.get_mut(child_id).unwrap().parent_pattern_id = Some(parent_id.clone());
 
         self.patterns.insert(parent_id, parent.clone());
 
@@ -276,11 +267,7 @@ impl FractalGovernanceEngine {
     /// Structural identity means: same quorum_ratio, same supermajority_ratio,
     /// and same decision_mechanism.  The scale is allowed (and expected) to
     /// differ.
-    pub fn verify_structural_identity(
-        &self,
-        pattern_a_id: &str,
-        pattern_b_id: &str,
-    ) -> bool {
+    pub fn verify_structural_identity(&self, pattern_a_id: &str, pattern_b_id: &str) -> bool {
         let a = match self.patterns.get(pattern_a_id) {
             Some(p) => p,
             None => return false,
@@ -294,10 +281,7 @@ impl FractalGovernanceEngine {
     }
 
     /// Get all patterns at a given scale.
-    pub fn get_patterns_at_scale(
-        &self,
-        scale: &GovernanceScale,
-    ) -> Vec<&FractalGovernancePattern> {
+    pub fn get_patterns_at_scale(&self, scale: &GovernanceScale) -> Vec<&FractalGovernancePattern> {
         self.patterns
             .values()
             .filter(|p| &p.scale == scale)
@@ -394,10 +378,7 @@ impl LivingPrimitive for FractalGovernanceEngine {
         2
     }
 
-    fn on_phase_change(
-        &mut self,
-        new_phase: CyclePhase,
-    ) -> LivingResult<Vec<LivingProtocolEvent>> {
+    fn on_phase_change(&mut self, new_phase: CyclePhase) -> LivingResult<Vec<LivingProtocolEvent>> {
         // Fractal governance is active during Co-Creation when governance
         // decisions are made and patterns may be replicated.
         self.active = new_phase == CyclePhase::CoCreation;
@@ -413,8 +394,7 @@ impl LivingPrimitive for FractalGovernanceEngine {
             if let Some(pattern) = self.patterns.get(id) {
                 for child_id in &pattern.child_patterns {
                     if let Some(child) = self.patterns.get(child_id) {
-                        let identical =
-                            Self::patterns_structurally_identical(pattern, child);
+                        let identical = Self::patterns_structurally_identical(pattern, child);
                         checks.push(Gate1Check {
                             invariant: format!(
                                 "structural identity between {} ({:?}) and {} ({:?})",
@@ -445,10 +425,7 @@ impl LivingPrimitive for FractalGovernanceEngine {
         for pattern in self.patterns.values() {
             let in_bounds = pattern.quorum_ratio >= 0.0 && pattern.quorum_ratio <= 1.0;
             checks.push(Gate1Check {
-                invariant: format!(
-                    "quorum_ratio in [0.0, 1.0] for pattern {}",
-                    pattern.id
-                ),
+                invariant: format!("quorum_ratio in [0.0, 1.0] for pattern {}", pattern.id),
                 passed: in_bounds,
                 details: if in_bounds {
                     None
@@ -591,7 +568,10 @@ mod tests {
         assert_eq!(event.pattern.scale, GovernanceScale::Team);
         assert_eq!(event.pattern.quorum_ratio, 0.51);
         assert_eq!(event.pattern.supermajority_ratio, 0.67);
-        assert_eq!(event.pattern.decision_mechanism, DecisionMechanism::Consensus);
+        assert_eq!(
+            event.pattern.decision_mechanism,
+            DecisionMechanism::Consensus
+        );
         assert_eq!(event.parent_scale, GovernanceScale::Community);
         assert_eq!(event.child_scale, GovernanceScale::Team);
 
@@ -617,11 +597,17 @@ mod tests {
         assert_eq!(event.pattern.scale, GovernanceScale::Community);
         assert_eq!(event.pattern.quorum_ratio, 0.60);
         assert_eq!(event.pattern.supermajority_ratio, 0.75);
-        assert_eq!(event.pattern.decision_mechanism, DecisionMechanism::ReputationWeighted);
+        assert_eq!(
+            event.pattern.decision_mechanism,
+            DecisionMechanism::ReputationWeighted
+        );
 
         // Child should record the parent
         let updated_child = engine.get_pattern(&child.id).unwrap();
-        assert_eq!(updated_child.parent_pattern_id, Some(event.pattern.id.clone()));
+        assert_eq!(
+            updated_child.parent_pattern_id,
+            Some(event.pattern.id.clone())
+        );
     }
 
     #[test]
@@ -690,12 +676,7 @@ mod tests {
     #[test]
     fn test_get_patterns_at_scale() {
         let mut engine = make_engine();
-        engine.create_pattern(
-            GovernanceScale::Team,
-            0.5,
-            0.67,
-            DecisionMechanism::Consent,
-        );
+        engine.create_pattern(GovernanceScale::Team, 0.5, 0.67, DecisionMechanism::Consent);
         engine.create_pattern(
             GovernanceScale::Team,
             0.6,
@@ -768,10 +749,9 @@ mod tests {
 
         // All patterns should be structurally identical
         assert!(engine.verify_structural_identity(&global.id, &individual_event.pattern.id));
-        assert!(engine.verify_structural_identity(
-            &regional_event.pattern.id,
-            &team_event.pattern.id
-        ));
+        assert!(
+            engine.verify_structural_identity(&regional_event.pattern.id, &team_event.pattern.id)
+        );
     }
 
     #[test]

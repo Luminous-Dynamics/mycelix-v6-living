@@ -108,9 +108,10 @@ impl LiminalityEngine {
     /// Returns the new phase, or an error if the entity is not in a liminal
     /// state or the transition would be backward/invalid.
     pub fn advance_phase(&mut self, record_id: &str) -> LivingResult<LiminalPhase> {
-        let record = self.records.get_mut(record_id).ok_or_else(|| {
-            LivingProtocolError::NotInLiminalState(record_id.to_string())
-        })?;
+        let record = self
+            .records
+            .get_mut(record_id)
+            .ok_or_else(|| LivingProtocolError::NotInLiminalState(record_id.to_string()))?;
 
         let next_phase = match &record.phase {
             LiminalPhase::PreLiminal => LiminalPhase::Liminal,
@@ -143,14 +144,11 @@ impl LiminalityEngine {
     ///
     /// This describes what the entity is becoming.  Can only be set while
     /// the entity is still in a liminal state (not yet Integrated).
-    pub fn set_emerging_identity(
-        &mut self,
-        record_id: &str,
-        identity: String,
-    ) -> LivingResult<()> {
-        let record = self.records.get_mut(record_id).ok_or_else(|| {
-            LivingProtocolError::NotInLiminalState(record_id.to_string())
-        })?;
+    pub fn set_emerging_identity(&mut self, record_id: &str, identity: String) -> LivingResult<()> {
+        let record = self
+            .records
+            .get_mut(record_id)
+            .ok_or_else(|| LivingProtocolError::NotInLiminalState(record_id.to_string()))?;
 
         if record.phase == LiminalPhase::Integrated {
             return Err(LivingProtocolError::NotInLiminalState(
@@ -171,9 +169,10 @@ impl LiminalityEngine {
         &mut self,
         record_id: &str,
     ) -> LivingResult<LiminalTransitionCompletedEvent> {
-        let record = self.records.get_mut(record_id).ok_or_else(|| {
-            LivingProtocolError::NotInLiminalState(record_id.to_string())
-        })?;
+        let record = self
+            .records
+            .get_mut(record_id)
+            .ok_or_else(|| LivingProtocolError::NotInLiminalState(record_id.to_string()))?;
 
         // Advance through remaining phases.
         while record.phase != LiminalPhase::Integrated {
@@ -208,9 +207,9 @@ impl LiminalityEngine {
     /// Check whether a given entity is currently in a liminal state
     /// (any phase except Integrated, or has no record at all).
     pub fn is_in_liminal_state(&self, entity_did: &Did) -> bool {
-        self.records.values().any(|r| {
-            r.entity_did == *entity_did && r.phase != LiminalPhase::Integrated
-        })
+        self.records
+            .values()
+            .any(|r| r.entity_did == *entity_did && r.phase != LiminalPhase::Integrated)
     }
 
     /// Get all entities currently in a liminal state.
@@ -226,9 +225,9 @@ impl LiminalityEngine {
     /// This is the core constitutional protection: entities in liminal state
     /// cannot be prematurely recategorized.
     pub fn is_recategorization_blocked(&self, entity_did: &Did) -> bool {
-        self.records.values().any(|r| {
-            r.entity_did == *entity_did && r.recategorization_blocked
-        })
+        self.records
+            .values()
+            .any(|r| r.entity_did == *entity_did && r.recategorization_blocked)
     }
 
     /// Get a liminal record by ID.
@@ -278,10 +277,7 @@ impl LivingPrimitive for LiminalityEngine {
         1
     }
 
-    fn on_phase_change(
-        &mut self,
-        new_phase: CyclePhase,
-    ) -> LivingResult<Vec<LivingProtocolEvent>> {
+    fn on_phase_change(&mut self, new_phase: CyclePhase) -> LivingResult<Vec<LivingProtocolEvent>> {
         let mut events = Vec::new();
 
         if new_phase == CyclePhase::Liminal {
@@ -325,9 +321,7 @@ impl LivingPrimitive for LiminalityEngine {
             details: if blocking_correct {
                 None
             } else {
-                Some(
-                    "Recategorization blocking inconsistent with liminal phase".to_string(),
-                )
+                Some("Recategorization blocking inconsistent with liminal phase".to_string())
             },
         });
 
@@ -588,16 +582,8 @@ mod tests {
     fn test_get_liminal_entities() {
         let mut engine = make_engine();
 
-        engine.enter_liminal_state(
-            &"did:myc:alice".into(),
-            LiminalEntityType::Agent,
-            None,
-        );
-        engine.enter_liminal_state(
-            &"did:myc:bob".into(),
-            LiminalEntityType::Dao,
-            None,
-        );
+        engine.enter_liminal_state(&"did:myc:alice".into(), LiminalEntityType::Agent, None);
+        engine.enter_liminal_state(&"did:myc:bob".into(), LiminalEntityType::Dao, None);
 
         let entities = engine.get_liminal_entities();
         assert_eq!(entities.len(), 2);
@@ -632,11 +618,7 @@ mod tests {
     #[test]
     fn test_gate1_invariants() {
         let mut engine = make_engine();
-        engine.enter_liminal_state(
-            &"did:myc:alice".into(),
-            LiminalEntityType::Agent,
-            None,
-        );
+        engine.enter_liminal_state(&"did:myc:alice".into(), LiminalEntityType::Agent, None);
 
         let checks = engine.gate1_check();
         assert!(checks.iter().all(|c| c.passed));
@@ -645,11 +627,8 @@ mod tests {
     #[test]
     fn test_gate1_after_integration() {
         let mut engine = make_engine();
-        let event = engine.enter_liminal_state(
-            &"did:myc:alice".into(),
-            LiminalEntityType::Agent,
-            None,
-        );
+        let event =
+            engine.enter_liminal_state(&"did:myc:alice".into(), LiminalEntityType::Agent, None);
         engine.complete_transition(&event.record.id).unwrap();
 
         let checks = engine.gate1_check();
@@ -663,16 +642,8 @@ mod tests {
     fn test_entity_type_variants() {
         let mut engine = make_engine();
 
-        engine.enter_liminal_state(
-            &"did:myc:agent".into(),
-            LiminalEntityType::Agent,
-            None,
-        );
-        engine.enter_liminal_state(
-            &"did:myc:dao".into(),
-            LiminalEntityType::Dao,
-            None,
-        );
+        engine.enter_liminal_state(&"did:myc:agent".into(), LiminalEntityType::Agent, None);
+        engine.enter_liminal_state(&"did:myc:dao".into(), LiminalEntityType::Dao, None);
         engine.enter_liminal_state(
             &"did:myc:protocol".into(),
             LiminalEntityType::Protocol,

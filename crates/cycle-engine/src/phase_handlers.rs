@@ -12,11 +12,9 @@ use std::sync::Arc;
 use chrono::Utc;
 
 use living_core::{
-    CyclePhase, CycleState,
-    LivingProtocolEvent, LivingResult,
-    EventBus, InMemoryEventBus,
-    CompostingConfig, KenosisConfig, EntanglementConfig, ShadowConfig,
-    FeatureFlags, NegativeCapabilityConfig,
+    CompostingConfig, CyclePhase, CycleState, EntanglementConfig, EventBus, FeatureFlags,
+    InMemoryEventBus, KenosisConfig, LivingProtocolEvent, LivingResult, NegativeCapabilityConfig,
+    ShadowConfig,
 };
 
 /// Trait for handling phase-specific behavior during the metabolism cycle.
@@ -77,13 +75,18 @@ impl Default for ShadowPhaseHandler {
 
 impl PhaseHandler for ShadowPhaseHandler {
     fn on_enter(&mut self, state: &CycleState) -> LivingResult<Vec<LivingProtocolEvent>> {
-        tracing::info!(cycle = state.cycle_number, "Entering Shadow phase: Gate 2 warnings suspended");
+        tracing::info!(
+            cycle = state.cycle_number,
+            "Entering Shadow phase: Gate 2 warnings suspended"
+        );
         Ok(Vec::new())
     }
 
     fn on_tick(&mut self, _state: &CycleState) -> LivingResult<Vec<LivingProtocolEvent>> {
         // Run shadow surfacing: detect Spectral K anomalies, surface suppressed content
-        let surfaced = self.engine.run_shadow_phase(self.spectral_k_threshold, &self.shadow_config);
+        let surfaced = self
+            .engine
+            .run_shadow_phase(self.spectral_k_threshold, &self.shadow_config);
         let events: Vec<LivingProtocolEvent> = surfaced
             .into_iter()
             .map(LivingProtocolEvent::ShadowSurfaced)
@@ -92,7 +95,10 @@ impl PhaseHandler for ShadowPhaseHandler {
     }
 
     fn on_exit(&mut self, state: &CycleState) -> LivingResult<Vec<LivingProtocolEvent>> {
-        tracing::info!(cycle = state.cycle_number, "Exiting Shadow phase: Gate 2 warnings resumed");
+        tracing::info!(
+            cycle = state.cycle_number,
+            "Exiting Shadow phase: Gate 2 warnings resumed"
+        );
         Ok(Vec::new())
     }
 
@@ -227,7 +233,10 @@ impl Default for LiminalPhaseHandler {
 
 impl PhaseHandler for LiminalPhaseHandler {
     fn on_enter(&mut self, state: &CycleState) -> LivingResult<Vec<LivingProtocolEvent>> {
-        tracing::info!(cycle = state.cycle_number, "Entering Liminal phase: no premature recategorization");
+        tracing::info!(
+            cycle = state.cycle_number,
+            "Entering Liminal phase: no premature recategorization"
+        );
         Ok(Vec::new())
     }
 
@@ -298,7 +307,10 @@ impl Default for NegativeCapabilityPhaseHandler {
 
 impl PhaseHandler for NegativeCapabilityPhaseHandler {
     fn on_enter(&mut self, state: &CycleState) -> LivingResult<Vec<LivingProtocolEvent>> {
-        tracing::info!(cycle = state.cycle_number, "Entering Negative Capability phase: voting blocked on held claims");
+        tracing::info!(
+            cycle = state.cycle_number,
+            "Entering Negative Capability phase: voting blocked on held claims"
+        );
         Ok(Vec::new())
     }
 
@@ -373,7 +385,10 @@ impl Default for ErosPhaseHandler {
 
 impl PhaseHandler for ErosPhaseHandler {
     fn on_enter(&mut self, state: &CycleState) -> LivingResult<Vec<LivingProtocolEvent>> {
-        tracing::info!(cycle = state.cycle_number, "Entering Eros phase: computing attractor fields");
+        tracing::info!(
+            cycle = state.cycle_number,
+            "Entering Eros phase: computing attractor fields"
+        );
         self.fields_computed = 0;
         self.connections_made = 0;
         Ok(Vec::new())
@@ -445,7 +460,10 @@ impl Default for CoCreationPhaseHandler {
 
 impl PhaseHandler for CoCreationPhaseHandler {
     fn on_enter(&mut self, state: &CycleState) -> LivingResult<Vec<LivingProtocolEvent>> {
-        tracing::info!(cycle = state.cycle_number, "Entering Co-Creation phase: standard consensus active");
+        tracing::info!(
+            cycle = state.cycle_number,
+            "Entering Co-Creation phase: standard consensus active"
+        );
         self.entanglements_formed = 0;
         Ok(Vec::new())
     }
@@ -520,7 +538,10 @@ impl Default for BeautyPhaseHandler {
 
 impl PhaseHandler for BeautyPhaseHandler {
     fn on_enter(&mut self, state: &CycleState) -> LivingResult<Vec<LivingProtocolEvent>> {
-        tracing::info!(cycle = state.cycle_number, "Entering Beauty phase: scoring proposals");
+        tracing::info!(
+            cycle = state.cycle_number,
+            "Entering Beauty phase: scoring proposals"
+        );
         self.proposals_scored = 0;
         self.mean_beauty_score = 0.0;
         Ok(Vec::new())
@@ -596,7 +617,10 @@ impl Default for EmergentPersonhoodPhaseHandler {
 
 impl PhaseHandler for EmergentPersonhoodPhaseHandler {
     fn on_enter(&mut self, state: &CycleState) -> LivingResult<Vec<LivingProtocolEvent>> {
-        tracing::info!(cycle = state.cycle_number, "Entering Emergent Personhood phase: computing network Phi");
+        tracing::info!(
+            cycle = state.cycle_number,
+            "Entering Emergent Personhood phase: computing network Phi"
+        );
         Ok(Vec::new())
     }
 
@@ -672,7 +696,10 @@ impl Default for KenosisPhaseHandler {
 
 impl PhaseHandler for KenosisPhaseHandler {
     fn on_enter(&mut self, state: &CycleState) -> LivingResult<Vec<LivingProtocolEvent>> {
-        tracing::info!(cycle = state.cycle_number, "Entering Kenosis phase: voluntary reputation release");
+        tracing::info!(
+            cycle = state.cycle_number,
+            "Entering Kenosis phase: voluntary reputation release"
+        );
         self.commitments = 0;
         self.total_reputation_released = 0.0;
         // Inform the kenosis engine of the current cycle number

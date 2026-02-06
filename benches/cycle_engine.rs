@@ -1,13 +1,13 @@
 //! Benchmarks for the cycle engine and primitive operations.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::sync::Arc;
 
-use living_core::{
-    InMemoryEventBus, EventBus, WoundSeverity, KenosisConfig,
-    WoundHealingConfig, EpistemicClassification, EpistemicTier, NormativeTier, MaterialityTier,
-};
 use cycle_engine::scheduler::CycleEngineBuilder;
+use living_core::{
+    EpistemicClassification, EpistemicTier, EventBus, InMemoryEventBus, KenosisConfig,
+    MaterialityTier, NormativeTier, WoundHealingConfig, WoundSeverity,
+};
 
 /// Benchmark engine creation.
 fn bench_engine_creation(c: &mut Criterion) {
@@ -30,9 +30,7 @@ fn bench_engine_start(c: &mut Criterion) {
                     .with_simulated_time(86400.0)
                     .build()
             },
-            |mut engine| {
-                black_box(engine.start().unwrap())
-            },
+            |mut engine| black_box(engine.start().unwrap()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -45,11 +43,7 @@ fn bench_tick(c: &mut Criterion) {
         .build();
     engine.start().unwrap();
 
-    c.bench_function("tick", |b| {
-        b.iter(|| {
-            black_box(engine.tick().unwrap())
-        })
-    });
+    c.bench_function("tick", |b| b.iter(|| black_box(engine.tick().unwrap())));
 }
 
 /// Benchmark phase transition.
@@ -63,9 +57,7 @@ fn bench_phase_transition(c: &mut Criterion) {
                 engine.start().unwrap();
                 engine
             },
-            |mut engine| {
-                black_box(engine.force_transition().unwrap())
-            },
+            |mut engine| black_box(engine.force_transition().unwrap()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -132,11 +124,15 @@ fn bench_wound_healing(c: &mut Criterion) {
         b.iter_batched(
             || WoundHealingEngine::new(config.clone(), event_bus.clone()),
             |mut engine: WoundHealingEngine| {
-                black_box(engine.create_wound(
-                    "did:agent:bench".to_string(),
-                    WoundSeverity::Moderate,
-                    "benchmark test".to_string(),
-                ).unwrap())
+                black_box(
+                    engine
+                        .create_wound(
+                            "did:agent:bench".to_string(),
+                            WoundSeverity::Moderate,
+                            "benchmark test".to_string(),
+                        )
+                        .unwrap(),
+                )
             },
             criterion::BatchSize::SmallInput,
         )
@@ -146,11 +142,13 @@ fn bench_wound_healing(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut engine = WoundHealingEngine::new(config.clone(), event_bus.clone());
-                let record = engine.create_wound(
-                    "did:agent:bench".to_string(),
-                    WoundSeverity::Moderate,
-                    "benchmark test".to_string(),
-                ).unwrap();
+                let record = engine
+                    .create_wound(
+                        "did:agent:bench".to_string(),
+                        WoundSeverity::Moderate,
+                        "benchmark test".to_string(),
+                    )
+                    .unwrap();
                 (engine, record.id)
             },
             |(mut engine, id): (WoundHealingEngine, String)| {
@@ -163,8 +161,8 @@ fn bench_wound_healing(c: &mut Criterion) {
 
 /// Benchmark composting operations.
 fn bench_composting(c: &mut Criterion) {
+    use living_core::{CompostableEntity, CompostingConfig};
     use metabolism::composting::{CompostingEngine, CompostingReason};
-    use living_core::{CompostingConfig, CompostableEntity};
 
     let event_bus: Arc<dyn EventBus> = Arc::new(InMemoryEventBus::new());
     let config = CompostingConfig::default();
@@ -173,11 +171,18 @@ fn bench_composting(c: &mut Criterion) {
         b.iter_batched(
             || CompostingEngine::new(config.clone(), event_bus.clone()),
             |mut engine| {
-                black_box(engine.start_composting(
-                    CompostableEntity::FailedProposal,
-                    "proposal-bench".to_string(),
-                    CompostingReason::ProposalFailed { vote_count: 5, required: 10 },
-                ).unwrap())
+                black_box(
+                    engine
+                        .start_composting(
+                            CompostableEntity::FailedProposal,
+                            "proposal-bench".to_string(),
+                            CompostingReason::ProposalFailed {
+                                vote_count: 5,
+                                required: 10,
+                            },
+                        )
+                        .unwrap(),
+                )
             },
             criterion::BatchSize::SmallInput,
         )
@@ -187,11 +192,16 @@ fn bench_composting(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut engine = CompostingEngine::new(config.clone(), event_bus.clone());
-                let record = engine.start_composting(
-                    CompostableEntity::FailedProposal,
-                    "proposal-bench".to_string(),
-                    CompostingReason::ProposalFailed { vote_count: 5, required: 10 },
-                ).unwrap();
+                let record = engine
+                    .start_composting(
+                        CompostableEntity::FailedProposal,
+                        "proposal-bench".to_string(),
+                        CompostingReason::ProposalFailed {
+                            vote_count: 5,
+                            required: 10,
+                        },
+                    )
+                    .unwrap();
                 (engine, record.id)
             },
             |(mut engine, record_id)| {
@@ -200,11 +210,15 @@ fn bench_composting(c: &mut Criterion) {
                     n: NormativeTier::NetworkConsensus,
                     m: MaterialityTier::Persistent,
                 };
-                black_box(engine.extract_nutrient(
-                    &record_id,
-                    "learned-something".to_string(),
-                    classification,
-                ).unwrap())
+                black_box(
+                    engine
+                        .extract_nutrient(
+                            &record_id,
+                            "learned-something".to_string(),
+                            classification,
+                        )
+                        .unwrap(),
+                )
             },
             criterion::BatchSize::SmallInput,
         )
@@ -226,9 +240,7 @@ fn bench_kenosis(c: &mut Criterion) {
                 engine.register_agent("did:agent:bench", 1000.0);
                 engine
             },
-            |mut engine| {
-                black_box(engine.commit_kenosis("did:agent:bench", 0.10).unwrap())
-            },
+            |mut engine| black_box(engine.commit_kenosis("did:agent:bench", 0.10).unwrap()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -236,9 +248,9 @@ fn bench_kenosis(c: &mut Criterion) {
 
 /// Benchmark entanglement operations.
 fn bench_entanglement(c: &mut Criterion) {
-    use relational::entangled_pairs::EntanglementEngine;
-    use living_core::EntanglementConfig;
     use chrono::Utc;
+    use living_core::EntanglementConfig;
+    use relational::entangled_pairs::EntanglementEngine;
 
     let mut config = EntanglementConfig::default();
     config.min_co_creation_events = 1;
@@ -292,9 +304,7 @@ fn bench_entanglement(c: &mut Criterion) {
                 }
                 engine
             },
-            |mut engine| {
-                black_box(engine.decay_all(Utc::now()))
-            },
+            |mut engine| black_box(engine.decay_all(Utc::now())),
             criterion::BatchSize::SmallInput,
         )
     });

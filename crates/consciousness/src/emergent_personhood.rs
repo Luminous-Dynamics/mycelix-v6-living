@@ -28,15 +28,11 @@
 use chrono::Utc;
 use tracing::{debug, info};
 
-use living_core::{
-    KVectorSignature, NetworkKVector,
-    NetworkPhiComputedEvent,
-    LivingProtocolEvent,
-    Gate1Check, Gate2Warning,
-    CyclePhase,
-    LivingProtocolError, LivingResult,
-};
 use living_core::traits::{LivingPrimitive, PrimitiveModule};
+use living_core::{
+    CyclePhase, Gate1Check, Gate2Warning, KVectorSignature, LivingProtocolError,
+    LivingProtocolEvent, LivingResult, NetworkKVector, NetworkPhiComputedEvent,
+};
 
 /// Default Phi threshold above which the network is considered "conscious."
 const DEFAULT_PHI_THRESHOLD: f64 = 0.5;
@@ -297,7 +293,10 @@ impl LivingPrimitive for EmergentPersonhoodService {
                 details: if phi >= 0.0 && phi.is_finite() {
                     None
                 } else {
-                    Some(format!("Phi value {} is invalid (must be non-negative and finite)", phi))
+                    Some(format!(
+                        "Phi value {} is invalid (must be non-negative and finite)",
+                        phi
+                    ))
                 },
             });
         }
@@ -424,9 +423,7 @@ fn compute_integration_from_covariance(cov: &[[f64; 8]; 8]) -> f64 {
     let epsilon = 1e-10;
 
     // Sum of log variances (diagonal)
-    let sum_log_var: f64 = (0..8)
-        .map(|i| (cov[i][i] + epsilon).ln())
-        .sum();
+    let sum_log_var: f64 = (0..8).map(|i| (cov[i][i] + epsilon).ln()).sum();
 
     // Log determinant of full covariance matrix
     // Use nalgebra for numeric stability
@@ -442,7 +439,6 @@ fn compute_integration_from_covariance(cov: &[[f64; 8]; 8]) -> f64 {
     let log_det = if det > 0.0 { det.ln() } else { -100.0 };
 
     // Integration = sum of individual entropies - joint entropy
-    
 
     (sum_log_var - log_det).max(0.0)
 }
@@ -467,8 +463,7 @@ mod tests {
     fn test_compute_phi_identical_agents() {
         let mut service = EmergentPersonhoodService::new();
         // Identical agents have zero variance -> Phi should be 0 or near 0
-        let kvecs: Vec<KVectorSignature> =
-            (0..10).map(|_| make_kvec([0.5; 8])).collect();
+        let kvecs: Vec<KVectorSignature> = (0..10).map(|_| make_kvec([0.5; 8])).collect();
 
         let phi = service.compute_network_phi(&kvecs).unwrap();
         // With identical data, covariance is zero matrix, integration ~ 0
@@ -612,10 +607,7 @@ mod tests {
         let mut service = EmergentPersonhoodService::new();
         assert!(service.last_phi().is_none());
 
-        let kvecs = vec![
-            make_kvec([0.3; 8]),
-            make_kvec([0.7; 8]),
-        ];
+        let kvecs = vec![make_kvec([0.3; 8]), make_kvec([0.7; 8])];
         let phi = service.compute_network_phi(&kvecs).unwrap();
         assert_eq!(service.last_phi(), Some(phi));
     }
@@ -640,10 +632,7 @@ mod tests {
     #[test]
     fn test_gate1_check_valid_phi() {
         let mut service = EmergentPersonhoodService::new();
-        let kvecs = vec![
-            make_kvec([0.3; 8]),
-            make_kvec([0.7; 8]),
-        ];
+        let kvecs = vec![make_kvec([0.3; 8]), make_kvec([0.7; 8])];
         service.compute_network_phi(&kvecs).unwrap();
 
         let checks = service.gate1_check();
@@ -657,14 +646,14 @@ mod tests {
     #[test]
     fn test_gate2_warning_below_threshold() {
         let mut service = EmergentPersonhoodService::with_threshold(10.0);
-        let kvecs = vec![
-            make_kvec([0.5; 8]),
-            make_kvec([0.5; 8]),
-        ];
+        let kvecs = vec![make_kvec([0.5; 8]), make_kvec([0.5; 8])];
         service.compute_network_phi(&kvecs).unwrap();
 
         let warnings = service.gate2_check();
-        assert!(!warnings.is_empty(), "Should warn when Phi is below threshold");
+        assert!(
+            !warnings.is_empty(),
+            "Should warn when Phi is below threshold"
+        );
     }
 
     #[test]

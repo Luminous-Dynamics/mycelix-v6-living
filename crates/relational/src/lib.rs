@@ -28,10 +28,10 @@
 
 pub mod entangled_pairs;
 pub mod eros_attractor;
-pub mod liminality;
 pub mod inter_species;
+pub mod liminality;
 
 pub use entangled_pairs::*;
 pub use eros_attractor::*;
-pub use liminality::*;
 pub use inter_species::*;
+pub use liminality::*;

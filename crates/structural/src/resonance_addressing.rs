@@ -33,13 +33,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::Utc;
-use sha2::{Sha256, Digest};
-use living_core::{
-    CyclePhase, Did, Gate1Check, Gate2Warning, HashDigest, LivingProtocolEvent,
-    ResonanceAddress, ResonanceAddressCreatedEvent, EventBus,
-};
-use living_core::traits::{LivingPrimitive, PrimitiveModule};
 use living_core::error::LivingResult;
+use living_core::traits::{LivingPrimitive, PrimitiveModule};
+use living_core::{
+    CyclePhase, Did, EventBus, Gate1Check, Gate2Warning, HashDigest, LivingProtocolEvent,
+    ResonanceAddress, ResonanceAddressCreatedEvent,
+};
+use sha2::{Digest, Sha256};
 
 // =============================================================================
 // Resonance Address Entry
@@ -279,10 +279,7 @@ impl LivingPrimitive for ResonanceAddressingEngine {
         2
     }
 
-    fn on_phase_change(
-        &mut self,
-        new_phase: CyclePhase,
-    ) -> LivingResult<Vec<LivingProtocolEvent>> {
+    fn on_phase_change(&mut self, new_phase: CyclePhase) -> LivingResult<Vec<LivingProtocolEvent>> {
         // Resonance addressing is available in all phases but primarily used
         // during Co-Creation when new content is published.
         self.active = new_phase == CyclePhase::CoCreation;
@@ -296,10 +293,7 @@ impl LivingPrimitive for ResonanceAddressingEngine {
             // Gate 1: semantic embedding must be non-empty
             let embedding_ok = !entry.address.semantic_embedding.is_empty();
             checks.push(Gate1Check {
-                invariant: format!(
-                    "semantic_embedding non-empty for address {:?}",
-                    &hash[..4]
-                ),
+                invariant: format!("semantic_embedding non-empty for address {:?}", &hash[..4]),
                 passed: embedding_ok,
                 details: if embedding_ok {
                     None
@@ -311,10 +305,7 @@ impl LivingPrimitive for ResonanceAddressingEngine {
             // Gate 1: harmonic signature must be non-empty
             let harmonic_ok = !entry.address.harmonic_signature.is_empty();
             checks.push(Gate1Check {
-                invariant: format!(
-                    "harmonic_signature non-empty for address {:?}",
-                    &hash[..4]
-                ),
+                invariant: format!("harmonic_signature non-empty for address {:?}", &hash[..4]),
                 passed: harmonic_ok,
                 details: if harmonic_ok {
                     None
@@ -434,10 +425,8 @@ mod tests {
     #[test]
     fn test_resolve_by_hash() {
         let mut engine = make_engine();
-        let event = engine.create_address(
-            "mycelial network topology",
-            "did:mycelix:bob".to_string(),
-        );
+        let event =
+            engine.create_address("mycelial network topology", "did:mycelix:bob".to_string());
 
         let resolved = engine.resolve_by_hash(event.address.pattern_hash);
         assert!(resolved.is_some());
@@ -469,17 +458,18 @@ mod tests {
         // Use a moderate threshold to find semantically similar addresses
         let results = engine.resolve_by_pattern(&query, 0.5);
         // The two governance-related entries should match; the physics one may or may not
-        assert!(results.len() >= 1, "Expected at least 1 match, got {}", results.len());
+        assert!(
+            results.len() >= 1,
+            "Expected at least 1 match, got {}",
+            results.len()
+        );
     }
 
     #[test]
     fn test_resolve_by_pattern_with_high_threshold() {
         let mut engine = make_engine();
 
-        engine.create_address(
-            "alpha beta gamma",
-            "did:mycelix:alice".to_string(),
-        );
+        engine.create_address("alpha beta gamma", "did:mycelix:alice".to_string());
         engine.create_address(
             "completely different words here",
             "did:mycelix:bob".to_string(),
@@ -526,9 +516,8 @@ mod tests {
 
     #[test]
     fn test_semantic_embedding_normalized() {
-        let embedding = ResonanceAddressingEngine::compute_semantic_embedding(
-            "the quick brown fox",
-        );
+        let embedding =
+            ResonanceAddressingEngine::compute_semantic_embedding("the quick brown fox");
         let magnitude: f64 = embedding.iter().map(|v| v * v).sum::<f64>().sqrt();
         assert!(
             (magnitude - 1.0).abs() < 1e-10,

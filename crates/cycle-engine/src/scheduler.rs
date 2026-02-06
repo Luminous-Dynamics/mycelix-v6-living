@@ -4,10 +4,12 @@
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{info, error, instrument};
+use tracing::{error, info, instrument};
 
-use living_core::{LivingProtocolEvent, LivingResult, LivingProtocolConfig, InMemoryEventBus, EventBus};
 use crate::engine::MetabolismCycleEngine;
+use living_core::{
+    EventBus, InMemoryEventBus, LivingProtocolConfig, LivingProtocolEvent, LivingResult,
+};
 
 #[cfg(feature = "telemetry")]
 use crate::telemetry::metrics;
@@ -28,7 +30,8 @@ impl CancellationToken {
 
     /// Cancel the token, signaling shutdown.
     pub fn cancel(&self) {
-        self.cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.cancelled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Check if the token has been cancelled.
@@ -76,7 +79,10 @@ impl CycleScheduler {
     }
 
     /// Set a callback for events.
-    pub fn on_events(mut self, callback: impl Fn(Vec<LivingProtocolEvent>) + Send + Sync + 'static) -> Self {
+    pub fn on_events(
+        mut self,
+        callback: impl Fn(Vec<LivingProtocolEvent>) + Send + Sync + 'static,
+    ) -> Self {
         self.event_callback = Some(Box::new(callback));
         self
     }
@@ -95,10 +101,7 @@ impl CycleScheduler {
         {
             let mut engine = self.engine.lock().await;
             let start_event = engine.start()?;
-            info!(
-                cycle = start_event.cycle_number,
-                "Cycle engine started"
-            );
+            info!(cycle = start_event.cycle_number, "Cycle engine started");
             if let Some(ref callback) = self.event_callback {
                 callback(vec![LivingProtocolEvent::CycleStarted(start_event)]);
             }
@@ -180,10 +183,7 @@ impl CycleScheduler {
 
                         // Track cycle completions (when we transition back to Shadow)
                         if let LivingProtocolEvent::CycleStarted(cycle_event) = event {
-                            info!(
-                                new_cycle = cycle_event.cycle_number,
-                                "New cycle started"
-                            );
+                            info!(new_cycle = cycle_event.cycle_number, "New cycle started");
 
                             #[cfg(feature = "telemetry")]
                             if cycle_event.cycle_number > 1 {
@@ -310,10 +310,7 @@ impl CycleEngineBuilder {
         );
 
         // Liminal: LiminalityEngine (no deps)
-        engine.register_handler(
-            CyclePhase::Liminal,
-            Box::new(LiminalPhaseHandler::new()),
-        );
+        engine.register_handler(CyclePhase::Liminal, Box::new(LiminalPhaseHandler::new()));
 
         // Negative Capability: NegativeCapabilityEngine (no deps)
         engine.register_handler(
@@ -338,10 +335,7 @@ impl CycleEngineBuilder {
         );
 
         // Beauty: BeautyValidityEngine (no deps)
-        engine.register_handler(
-            CyclePhase::Beauty,
-            Box::new(BeautyPhaseHandler::new()),
-        );
+        engine.register_handler(CyclePhase::Beauty, Box::new(BeautyPhaseHandler::new()));
 
         // Emergent Personhood: EmergentPersonhoodService (tier4-aspirational feature)
         engine.register_handler(
@@ -374,7 +368,11 @@ mod tests {
     use super::*;
     use crate::phase_handlers::PhaseHandler;
 
-    fn make_state(cycle: u64, phase: living_core::CyclePhase, phase_day: u32) -> living_core::CycleState {
+    fn make_state(
+        cycle: u64,
+        phase: living_core::CyclePhase,
+        phase_day: u32,
+    ) -> living_core::CycleState {
         living_core::CycleState {
             cycle_number: cycle,
             current_phase: phase,
@@ -439,8 +437,8 @@ mod tests {
         handler.engine_mut().record_suppression(
             "content-1",
             "low quality",
-            0.8, // suppressor rep
-            0.2, // author rep (low rep dissent)
+            0.8,   // suppressor rep
+            0.2,   // author rep (low rep dissent)
             false, // not gate1 protected
         );
 
@@ -504,10 +502,9 @@ mod tests {
         );
 
         // Form entanglement (requires min_co_creation_events)
-        let _ = handler.engine_mut().form_entanglement(
-            &"did:agent:alice".to_string(),
-            &"did:agent:bob".to_string(),
-        );
+        let _ = handler
+            .engine_mut()
+            .form_entanglement(&"did:agent:alice".to_string(), &"did:agent:bob".to_string());
 
         let state = make_state(1, living_core::CyclePhase::CoCreation, 3);
 
@@ -522,7 +519,7 @@ mod tests {
     #[test]
     fn test_kenosis_handler_sets_cycle_on_enter() {
         use crate::phase_handlers::KenosisPhaseHandler;
-        use living_core::{KenosisConfig, InMemoryEventBus};
+        use living_core::{InMemoryEventBus, KenosisConfig};
         use std::sync::Arc;
 
         let event_bus: Arc<dyn EventBus> = Arc::new(InMemoryEventBus::new());
@@ -546,21 +543,24 @@ mod tests {
     #[test]
     fn test_composting_handler_reports_active_composting() {
         use crate::phase_handlers::CompostingPhaseHandler;
-        use living_core::{CompostingConfig, InMemoryEventBus, CompostableEntity};
+        use living_core::{CompostableEntity, CompostingConfig, InMemoryEventBus};
         use std::sync::Arc;
 
         let event_bus: Arc<dyn EventBus> = Arc::new(InMemoryEventBus::new());
         let mut handler = CompostingPhaseHandler::new(CompostingConfig::default(), event_bus);
 
         // Start composting via the engine
-        handler.engine_mut().start_composting(
-            CompostableEntity::FailedProposal,
-            "prop-123".to_string(),
-            metabolism::composting::CompostingReason::ProposalFailed {
-                vote_count: 5,
-                required: 10,
-            },
-        ).unwrap();
+        handler
+            .engine_mut()
+            .start_composting(
+                CompostableEntity::FailedProposal,
+                "prop-123".to_string(),
+                metabolism::composting::CompostingReason::ProposalFailed {
+                    vote_count: 5,
+                    required: 10,
+                },
+            )
+            .unwrap();
 
         let state = make_state(1, living_core::CyclePhase::Composting, 2);
 
@@ -616,7 +616,9 @@ mod tests {
 
         let metrics = handler.collect_metrics();
         assert_eq!(metrics["entities_in_transition"].as_u64().unwrap(), 1);
-        assert!(handler.engine().is_recategorization_blocked(&"did:entity:transitioning".to_string()));
+        assert!(handler
+            .engine()
+            .is_recategorization_blocked(&"did:entity:transitioning".to_string()));
     }
 
     #[test]
@@ -630,8 +632,15 @@ mod tests {
 
         // Walk through all phases and verify ticks produce valid events
         let phases = [
-            "Shadow", "Composting", "Liminal", "NegativeCapability",
-            "Eros", "CoCreation", "Beauty", "EmergentPersonhood", "Kenosis",
+            "Shadow",
+            "Composting",
+            "Liminal",
+            "NegativeCapability",
+            "Eros",
+            "CoCreation",
+            "Beauty",
+            "EmergentPersonhood",
+            "Kenosis",
         ];
 
         for (_i, phase_name) in phases.iter().enumerate() {
@@ -641,7 +650,11 @@ mod tests {
 
             // Transition to next phase
             let transition_events = engine.force_transition().unwrap();
-            assert!(!transition_events.is_empty(), "Phase {} transition should emit events", phase_name);
+            assert!(
+                !transition_events.is_empty(),
+                "Phase {} transition should emit events",
+                phase_name
+            );
         }
 
         // Should be in cycle 2 now

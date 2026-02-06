@@ -22,11 +22,11 @@
 //! subscribers.
 
 pub mod composting;
-pub mod wound_healing;
-pub mod metabolic_trust;
 pub mod kenosis;
+pub mod metabolic_trust;
+pub mod wound_healing;
 
 pub use composting::CompostingEngine;
-pub use wound_healing::WoundHealingEngine;
-pub use metabolic_trust::MetabolicTrustEngine;
 pub use kenosis::KenosisEngine;
+pub use metabolic_trust::MetabolicTrustEngine;
+pub use wound_healing::WoundHealingEngine;

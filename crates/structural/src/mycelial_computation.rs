@@ -49,13 +49,12 @@ use std::sync::Arc;
 use chrono::Utc;
 use uuid::Uuid;
 
-use living_core::{
-    CyclePhase, Did, Gate1Check, Gate2Warning, HashDigest, LivingProtocolEvent,
-    MycelialTask, MycelialTaskCompletedEvent, MycelialTaskDistributedEvent,
-    EventBus,
-};
-use living_core::traits::{LivingPrimitive, PrimitiveModule};
 use living_core::error::{LivingProtocolError, LivingResult};
+use living_core::traits::{LivingPrimitive, PrimitiveModule};
+use living_core::{
+    CyclePhase, Did, EventBus, Gate1Check, Gate2Warning, HashDigest, LivingProtocolEvent,
+    MycelialTask, MycelialTaskCompletedEvent, MycelialTaskDistributedEvent,
+};
 
 // =============================================================================
 // Assignment Strategy
@@ -232,11 +231,8 @@ impl MycelialComputationEngine {
                 self.node_capabilities
                     .iter()
                     .filter(|(_, caps)| {
-                        caps.iter().any(|cap| {
-                            keywords
-                                .iter()
-                                .any(|kw| cap.to_lowercase().contains(kw))
-                        })
+                        caps.iter()
+                            .any(|cap| keywords.iter().any(|kw| cap.to_lowercase().contains(kw)))
                     })
                     .map(|(did, _)| did.clone())
                     .take(3)
@@ -274,12 +270,7 @@ impl MycelialComputationEngine {
     /// Submit a computation result from a node.
     ///
     /// Returns true if the result was accepted (node is assigned to the task).
-    pub fn submit_result(
-        &mut self,
-        task_id: &str,
-        node_did: Did,
-        result_hash: HashDigest,
-    ) -> bool {
+    pub fn submit_result(&mut self, task_id: &str, node_did: Did, result_hash: HashDigest) -> bool {
         let task = match self.tasks.get(task_id) {
             Some(t) => t,
             None => return false,
@@ -346,10 +337,7 @@ impl MycelialComputationEngine {
     /// Sets the result_hash to the majority result and marks the task as
     /// completed.  Returns an error if the task is not verified or does not
     /// exist.
-    pub fn complete_task(
-        &mut self,
-        task_id: &str,
-    ) -> LivingResult<MycelialTaskCompletedEvent> {
+    pub fn complete_task(&mut self, task_id: &str) -> LivingResult<MycelialTaskCompletedEvent> {
         if !self.verify_result(task_id) {
             return Err(LivingProtocolError::InvalidResonancePattern(format!(
                 "Task {} has not been verified by a quorum",
@@ -359,10 +347,7 @@ impl MycelialComputationEngine {
 
         // Find the majority result hash
         let results = self.task_results.get(task_id).ok_or_else(|| {
-            LivingProtocolError::InvalidResonancePattern(format!(
-                "No results for task {}",
-                task_id
-            ))
+            LivingProtocolError::InvalidResonancePattern(format!("No results for task {}", task_id))
         })?;
 
         let mut hash_counts: HashMap<HashDigest, usize> = HashMap::new();
@@ -461,10 +446,7 @@ impl LivingPrimitive for MycelialComputationEngine {
         3
     }
 
-    fn on_phase_change(
-        &mut self,
-        new_phase: CyclePhase,
-    ) -> LivingResult<Vec<LivingProtocolEvent>> {
+    fn on_phase_change(&mut self, new_phase: CyclePhase) -> LivingResult<Vec<LivingProtocolEvent>> {
         // Mycelial computation is active during Co-Creation.
         self.active = new_phase == CyclePhase::CoCreation;
         Ok(Vec::new())
@@ -478,10 +460,7 @@ impl LivingPrimitive for MycelialComputationEngine {
             if task.completed.is_some() {
                 let has_result = task.result_hash.is_some();
                 checks.push(Gate1Check {
-                    invariant: format!(
-                        "completed task {} has result_hash",
-                        task.id
-                    ),
+                    invariant: format!("completed task {} has result_hash", task.id),
                     passed: has_result,
                     details: if has_result {
                         None
@@ -495,10 +474,7 @@ impl LivingPrimitive for MycelialComputationEngine {
             if task.completed.is_none() && !task.assigned_nodes.is_empty() {
                 let non_empty = !task.assigned_nodes.is_empty();
                 checks.push(Gate1Check {
-                    invariant: format!(
-                        "assigned_nodes non-empty for in-progress task {}",
-                        task.id
-                    ),
+                    invariant: format!("assigned_nodes non-empty for in-progress task {}", task.id),
                     passed: non_empty,
                     details: None,
                 });
@@ -541,7 +517,11 @@ impl LivingPrimitive for MycelialComputationEngine {
 
     fn collect_metrics(&self) -> serde_json::Value {
         let pending = self.get_pending_tasks().len();
-        let completed = self.tasks.values().filter(|t| t.completed.is_some()).count();
+        let completed = self
+            .tasks
+            .values()
+            .filter(|t| t.completed.is_some())
+            .count();
 
         serde_json::json!({
             "primitive": "mycelial_computation",
@@ -598,10 +578,8 @@ mod tests {
     #[test]
     fn test_register_node() {
         let mut engine = make_engine();
-        let is_new = engine.register_node(
-            "did:mycelix:node1".to_string(),
-            vec!["compute".to_string()],
-        );
+        let is_new =
+            engine.register_node("did:mycelix:node1".to_string(), vec!["compute".to_string()]);
         assert!(is_new);
         assert_eq!(engine.registered_node_count(), 1);
 
@@ -626,7 +604,11 @@ mod tests {
         let event = engine.submit_task("hash computation".to_string(), test_hash(1));
 
         assert!(engine.get_task(&event.task.id).is_some());
-        assert!(engine.get_task(&event.task.id).unwrap().assigned_nodes.is_empty());
+        assert!(engine
+            .get_task(&event.task.id)
+            .unwrap()
+            .assigned_nodes
+            .is_empty());
         assert!(engine.get_task(&event.task.id).unwrap().completed.is_none());
         assert_eq!(engine.total_task_count(), 1);
         assert_eq!(bus.event_count(), 1);
@@ -665,10 +647,7 @@ mod tests {
     #[test]
     fn test_assign_nodes_capability_matched() {
         let mut engine = make_engine();
-        engine.register_node(
-            "did:mycelix:hasher".to_string(),
-            vec!["hash".to_string()],
-        );
+        engine.register_node("did:mycelix:hasher".to_string(), vec!["hash".to_string()]);
         engine.register_node(
             "did:mycelix:verifier".to_string(),
             vec!["verify".to_string()],
@@ -702,10 +681,7 @@ mod tests {
         );
 
         let event = engine.submit_task("quantum computation".to_string(), test_hash(1));
-        let result = engine.assign_nodes(
-            &event.task.id,
-            AssignmentStrategy::CapabilityMatched,
-        );
+        let result = engine.assign_nodes(&event.task.id, AssignmentStrategy::CapabilityMatched);
         assert!(result.is_err());
     }
 
@@ -858,7 +834,11 @@ mod tests {
         assert_eq!(engine.get_pending_tasks().len(), 2);
 
         // Complete one task
-        let tasks: Vec<_> = engine.get_pending_tasks().iter().map(|t| t.id.clone()).collect();
+        let tasks: Vec<_> = engine
+            .get_pending_tasks()
+            .iter()
+            .map(|t| t.id.clone())
+            .collect();
         let task_id = &tasks[0];
         engine
             .assign_nodes(task_id, AssignmentStrategy::NearestNeighbor)

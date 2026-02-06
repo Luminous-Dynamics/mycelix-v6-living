@@ -209,6 +209,63 @@ pub fn record_network_phi(input: PhiInput) -> ExternResult<Record> {
     Ok(record)
 }
 
+/// Retrieve all k-vector snapshots linked to the given agent.
+///
+/// Uses GetStrategy::Network to query the DHT for consistency across nodes.
+/// This is critical for multi-node deployments where links may not have
+/// propagated to the local node yet.
+#[hdk_extern]
+pub fn get_k_vector_history(agent: AgentPubKey) -> ExternResult<Vec<Record>> {
+    let links = get_links(
+        LinkQuery::new(agent, LinkTypeFilter::single_type(
+            zome_info()?.id,
+            LinkType(LinkTypes::AgentToKVectorHistory as u8),
+        )),
+        GetStrategy::Network, // Network for multi-node consistency
+    )?;
+
+    let mut records: Vec<Record> = Vec::new();
+    for link in links {
+        let target = link
+            .target
+            .into_action_hash()
+            .ok_or(wasm_error!(WasmErrorInner::Guest(
+                "Link target is not an ActionHash".to_string()
+            )))?;
+
+        if let Some(record) = get(target, GetOptions::default())? {
+            records.push(record);
+        }
+    }
+
+    Ok(records)
+}
+
+/// Retrieve all confirmations linked to a dream proposal.
+///
+/// Uses GetStrategy::Network to query the DHT for consistency across nodes.
+/// This is critical for multi-node deployments where links may not have
+/// propagated to the local node yet.
+#[hdk_extern]
+pub fn get_dream_confirmations(proposal_hash: ActionHash) -> ExternResult<Vec<AgentPubKey>> {
+    let links = get_links(
+        LinkQuery::new(proposal_hash, LinkTypeFilter::single_type(
+            zome_info()?.id,
+            LinkType(LinkTypes::DreamToConfirmation as u8),
+        )),
+        GetStrategy::Network, // Network for multi-node consistency
+    )?;
+
+    let mut agents: Vec<AgentPubKey> = Vec::new();
+    for link in links {
+        if let Some(agent) = link.target.into_agent_pub_key() {
+            agents.push(agent);
+        }
+    }
+
+    Ok(agents)
+}
+
 // ---------------------------------------------------------------------------
 // Helper Structs
 // ---------------------------------------------------------------------------

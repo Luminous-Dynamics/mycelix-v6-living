@@ -271,6 +271,70 @@ pub fn get_beauty_scores(proposal_hash: ActionHash) -> ExternResult<Vec<Record>>
     Ok(records)
 }
 
+/// Retrieve all shadow records linked to the given agent for a specific topic.
+///
+/// Uses GetStrategy::Network to query the DHT for consistency across nodes.
+/// This is critical for multi-node deployments where links may not have
+/// propagated to the local node yet.
+#[hdk_extern]
+pub fn get_shadows_for_agent(agent: AgentPubKey) -> ExternResult<Vec<Record>> {
+    let links = get_links(
+        LinkQuery::new(agent, LinkTypeFilter::single_type(
+            zome_info()?.id,
+            LinkType(LinkTypes::TopicToShadows as u8),
+        )),
+        GetStrategy::Network, // Network for multi-node consistency
+    )?;
+
+    let mut records: Vec<Record> = Vec::new();
+    for link in links {
+        let target = link
+            .target
+            .into_action_hash()
+            .ok_or(wasm_error!(WasmErrorInner::Guest(
+                "Link target is not an ActionHash".to_string()
+            )))?;
+
+        if let Some(record) = get(target, GetOptions::default())? {
+            records.push(record);
+        }
+    }
+
+    Ok(records)
+}
+
+/// Retrieve all silence records linked to the given agent.
+///
+/// Uses GetStrategy::Network to query the DHT for consistency across nodes.
+/// This is critical for multi-node deployments where links may not have
+/// propagated to the local node yet.
+#[hdk_extern]
+pub fn get_silences_for_agent(agent: AgentPubKey) -> ExternResult<Vec<Record>> {
+    let links = get_links(
+        LinkQuery::new(agent, LinkTypeFilter::single_type(
+            zome_info()?.id,
+            LinkType(LinkTypes::AgentToSilences as u8),
+        )),
+        GetStrategy::Network, // Network for multi-node consistency
+    )?;
+
+    let mut records: Vec<Record> = Vec::new();
+    for link in links {
+        let target = link
+            .target
+            .into_action_hash()
+            .ok_or(wasm_error!(WasmErrorInner::Guest(
+                "Link target is not an ActionHash".to_string()
+            )))?;
+
+        if let Some(record) = get(target, GetOptions::default())? {
+            records.push(record);
+        }
+    }
+
+    Ok(records)
+}
+
 // ---------------------------------------------------------------------------
 // Helper Structs
 // ---------------------------------------------------------------------------

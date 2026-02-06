@@ -1,7 +1,7 @@
 //! Core types shared across all Living Protocol primitives.
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
 
 // =============================================================================
 // Identity Types
@@ -524,7 +524,13 @@ pub struct BeautyScore {
 
 impl BeautyScore {
     /// Compute beauty score from components.
-    pub fn compute(symmetry: f64, economy: f64, resonance: f64, surprise: f64, completeness: f64) -> Self {
+    pub fn compute(
+        symmetry: f64,
+        economy: f64,
+        resonance: f64,
+        surprise: f64,
+        completeness: f64,
+    ) -> Self {
         let composite = (0.20 * symmetry
             + 0.20 * economy
             + 0.25 * resonance

@@ -27,15 +27,11 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use living_core::{
-    DreamState, DreamProposal,
-    DreamStateChangedEvent, DreamProposalGeneratedEvent,
-    LivingProtocolEvent,
-    Gate1Check, Gate2Warning,
-    CyclePhase,
-    LivingProtocolError, LivingResult,
-};
 use living_core::traits::{LivingPrimitive, PrimitiveModule};
+use living_core::{
+    CyclePhase, DreamProposal, DreamProposalGeneratedEvent, DreamState, DreamStateChangedEvent,
+    Gate1Check, Gate2Warning, LivingProtocolError, LivingProtocolEvent, LivingResult,
+};
 
 /// Confirmation threshold: 67% supermajority required.
 const CONFIRMATION_THRESHOLD: f64 = 0.67;
@@ -126,10 +122,7 @@ impl CollectiveDreamingEngine {
     ///
     /// ## Errors
     /// - Returns `DreamPhaseRestriction` if the transition is invalid.
-    pub fn transition_to(
-        &mut self,
-        new_state: DreamState,
-    ) -> LivingResult<DreamStateChangedEvent> {
+    pub fn transition_to(&mut self, new_state: DreamState) -> LivingResult<DreamStateChangedEvent> {
         let from = self.current_state;
 
         if from == new_state {
@@ -177,10 +170,7 @@ impl CollectiveDreamingEngine {
     /// ## Safeguard
     /// The proposal is created with `confirmed: false` and `financial_operations: false`.
     /// It must be confirmed during the Waking state with 0.67 threshold.
-    pub fn submit_dream_proposal(
-        &mut self,
-        content: String,
-    ) -> LivingResult<DreamProposal> {
+    pub fn submit_dream_proposal(&mut self, content: String) -> LivingResult<DreamProposal> {
         if !self.is_dreaming() {
             return Err(LivingProtocolError::DreamPhaseRestriction(
                 "Dream proposals can only be submitted during a dream state (REM/Deep/Lucid)"
@@ -250,15 +240,12 @@ impl CollectiveDreamingEngine {
             ));
         }
 
-        let proposal = self
-            .pending_proposals
-            .remove(proposal_id)
-            .ok_or_else(|| {
-                LivingProtocolError::DreamPhaseRestriction(format!(
-                    "Proposal {} not found in pending proposals",
-                    proposal_id
-                ))
-            })?;
+        let proposal = self.pending_proposals.remove(proposal_id).ok_or_else(|| {
+            LivingProtocolError::DreamPhaseRestriction(format!(
+                "Proposal {} not found in pending proposals",
+                proposal_id
+            ))
+        })?;
 
         if votes_total == 0 {
             self.rejected_proposals.push(proposal);
@@ -415,10 +402,7 @@ impl LivingPrimitive for CollectiveDreamingEngine {
         });
 
         // Gate 1: All pending proposals must have confirmed = false
-        let all_unconfirmed = self
-            .pending_proposals
-            .values()
-            .all(|p| !p.confirmed);
+        let all_unconfirmed = self.pending_proposals.values().all(|p| !p.confirmed);
 
         checks.push(Gate1Check {
             invariant: "dream_pending_unconfirmed".to_string(),
@@ -457,7 +441,10 @@ impl LivingPrimitive for CollectiveDreamingEngine {
                 details: if self.is_financial_blocked() {
                     None
                 } else {
-                    Some("CRITICAL: Financial operations not blocked during dream state.".to_string())
+                    Some(
+                        "CRITICAL: Financial operations not blocked during dream state."
+                            .to_string(),
+                    )
                 },
             });
         }
@@ -715,9 +702,7 @@ mod tests {
         let mut engine = CollectiveDreamingEngine::new();
         engine.transition_to(DreamState::Rem).unwrap();
 
-        let proposal = engine
-            .submit_dream_proposal("Test".to_string())
-            .unwrap();
+        let proposal = engine.submit_dream_proposal("Test".to_string()).unwrap();
         let proposal_id = proposal.id.clone();
 
         engine.transition_to(DreamState::Waking).unwrap();
@@ -735,9 +720,7 @@ mod tests {
         let mut engine = CollectiveDreamingEngine::new();
         engine.transition_to(DreamState::Rem).unwrap();
 
-        let proposal = engine
-            .submit_dream_proposal("Test".to_string())
-            .unwrap();
+        let proposal = engine.submit_dream_proposal("Test".to_string()).unwrap();
         let proposal_id = proposal.id.clone();
 
         engine.transition_to(DreamState::Waking).unwrap();
@@ -756,9 +739,7 @@ mod tests {
         let mut engine = CollectiveDreamingEngine::new();
         engine.transition_to(DreamState::Rem).unwrap();
 
-        let proposal = engine
-            .submit_dream_proposal("Test".to_string())
-            .unwrap();
+        let proposal = engine.submit_dream_proposal("Test".to_string()).unwrap();
         let proposal_id = proposal.id.clone();
 
         engine.transition_to(DreamState::Waking).unwrap();
@@ -775,9 +756,7 @@ mod tests {
         let mut engine = CollectiveDreamingEngine::new();
         engine.transition_to(DreamState::Rem).unwrap();
 
-        let proposal = engine
-            .submit_dream_proposal("Test".to_string())
-            .unwrap();
+        let proposal = engine.submit_dream_proposal("Test".to_string()).unwrap();
 
         // SAFEGUARD: Cannot confirm while dreaming
         let result = engine.confirm_dream_proposal(&proposal.id, 100, 100);
@@ -789,17 +768,13 @@ mod tests {
         let mut engine = CollectiveDreamingEngine::new();
         engine.transition_to(DreamState::Rem).unwrap();
 
-        let proposal = engine
-            .submit_dream_proposal("Test".to_string())
-            .unwrap();
+        let proposal = engine.submit_dream_proposal("Test".to_string()).unwrap();
         let proposal_id = proposal.id.clone();
 
         engine.transition_to(DreamState::Waking).unwrap();
 
         // Zero total votes -> rejected
-        let confirmed = engine
-            .confirm_dream_proposal(&proposal_id, 0, 0)
-            .unwrap();
+        let confirmed = engine.confirm_dream_proposal(&proposal_id, 0, 0).unwrap();
         assert!(!confirmed);
     }
 
@@ -825,12 +800,8 @@ mod tests {
     fn test_gate1_all_pass_with_proposals() {
         let mut engine = CollectiveDreamingEngine::new();
         engine.transition_to(DreamState::Rem).unwrap();
-        engine
-            .submit_dream_proposal("Test 1".to_string())
-            .unwrap();
-        engine
-            .submit_dream_proposal("Test 2".to_string())
-            .unwrap();
+        engine.submit_dream_proposal("Test 1".to_string()).unwrap();
+        engine.submit_dream_proposal("Test 2".to_string()).unwrap();
 
         let checks = engine.gate1_check();
         // All proposals should have financial_operations=false, confirmed=false
@@ -900,9 +871,7 @@ mod tests {
         engine.transition_to(DreamState::Rem).unwrap();
         engine.drain_events(); // clear transition event
 
-        engine
-            .submit_dream_proposal("Test".to_string())
-            .unwrap();
+        engine.submit_dream_proposal("Test".to_string()).unwrap();
 
         let events = engine.drain_events();
         assert_eq!(events.len(), 1);
@@ -976,19 +945,13 @@ mod tests {
         assert!(!engine.is_financial_blocked());
 
         // 6. Confirm proposals during Waking
-        let confirmed = engine
-            .confirm_dream_proposal(&p1.id, 80, 100)
-            .unwrap();
+        let confirmed = engine.confirm_dream_proposal(&p1.id, 80, 100).unwrap();
         assert!(confirmed); // 80% > 67%
 
-        let confirmed = engine
-            .confirm_dream_proposal(&p2.id, 60, 100)
-            .unwrap();
+        let confirmed = engine.confirm_dream_proposal(&p2.id, 60, 100).unwrap();
         assert!(!confirmed); // 60% < 67%
 
-        let confirmed = engine
-            .confirm_dream_proposal(&p3.id, 67, 100)
-            .unwrap();
+        let confirmed = engine.confirm_dream_proposal(&p3.id, 67, 100).unwrap();
         assert!(confirmed); // 67% = 67% (exact threshold)
 
         assert_eq!(engine.confirmed_proposal_count(), 2);

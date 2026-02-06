@@ -40,12 +40,12 @@ use std::sync::Arc;
 
 use chrono::{Duration, Utc};
 
-use living_core::{
-    CyclePhase, Did, Gate1Check, Gate2Warning, LivingProtocolEvent,
-    TimeCrystalPeriod, TimeCrystalPeriodStartedEvent, EventBus,
-};
-use living_core::traits::{LivingPrimitive, PrimitiveModule};
 use living_core::error::{LivingProtocolError, LivingResult};
+use living_core::traits::{LivingPrimitive, PrimitiveModule};
+use living_core::{
+    CyclePhase, Did, EventBus, Gate1Check, Gate2Warning, LivingProtocolEvent, TimeCrystalPeriod,
+    TimeCrystalPeriodStartedEvent,
+};
 
 // =============================================================================
 // Time-Crystal Consensus Engine
@@ -298,10 +298,7 @@ impl LivingPrimitive for TimeCrystalEngine {
         3
     }
 
-    fn on_phase_change(
-        &mut self,
-        new_phase: CyclePhase,
-    ) -> LivingResult<Vec<LivingProtocolEvent>> {
+    fn on_phase_change(&mut self, new_phase: CyclePhase) -> LivingResult<Vec<LivingProtocolEvent>> {
         // Time-crystal consensus is active during Co-Creation when
         // consensus decisions are actually made.
         self.active = new_phase == CyclePhase::CoCreation;
@@ -317,10 +314,7 @@ impl LivingPrimitive for TimeCrystalEngine {
             // Gate 1: phase_angle in [0, 2*PI)
             let angle_ok = period.phase_angle >= 0.0 && period.phase_angle < two_pi;
             checks.push(Gate1Check {
-                invariant: format!(
-                    "phase_angle in [0, 2*PI) for period {}",
-                    period.period_id
-                ),
+                invariant: format!("phase_angle in [0, 2*PI) for period {}", period.period_id),
                 passed: angle_ok,
                 details: if angle_ok {
                     None
@@ -332,10 +326,7 @@ impl LivingPrimitive for TimeCrystalEngine {
             // Gate 1: period duration must be positive
             let duration_ok = period.period_duration > Duration::zero();
             checks.push(Gate1Check {
-                invariant: format!(
-                    "period_duration positive for period {}",
-                    period.period_id
-                ),
+                invariant: format!("period_duration positive for period {}", period.period_id),
                 passed: duration_ok,
                 details: if duration_ok {
                     None
@@ -347,10 +338,7 @@ impl LivingPrimitive for TimeCrystalEngine {
             // Gate 1: validators must be non-empty
             let validators_ok = !period.validators.is_empty();
             checks.push(Gate1Check {
-                invariant: format!(
-                    "validators non-empty for period {}",
-                    period.period_id
-                ),
+                invariant: format!("validators non-empty for period {}", period.period_id),
                 passed: validators_ok,
                 details: if validators_ok {
                     None
@@ -555,11 +543,15 @@ mod tests {
         assert_eq!(v1, validators[1]);
 
         // Phase in third sector -> third validator
-        let v2 = engine.get_validator_for_phase(2.0 * sector_size + 0.1).unwrap();
+        let v2 = engine
+            .get_validator_for_phase(2.0 * sector_size + 0.1)
+            .unwrap();
         assert_eq!(v2, validators[2]);
 
         // Phase in fourth sector -> fourth validator
-        let v3 = engine.get_validator_for_phase(3.0 * sector_size + 0.1).unwrap();
+        let v3 = engine
+            .get_validator_for_phase(3.0 * sector_size + 0.1)
+            .unwrap();
         assert_eq!(v3, validators[3]);
     }
 
@@ -641,10 +633,7 @@ mod tests {
         let mut engine = make_engine();
         engine
             .start_period(
-                vec![
-                    "did:mycelix:v1".to_string(),
-                    "did:mycelix:v2".to_string(),
-                ],
+                vec!["did:mycelix:v1".to_string(), "did:mycelix:v2".to_string()],
                 Duration::hours(1),
             )
             .unwrap();

@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../../contracts/FractalDAO.sol";
+import "../../contracts/libraries/Errors.sol";
 
 /**
  * @title FractalDAO Formal Verification Tests (Halmos)
@@ -10,10 +11,14 @@ import "../../contracts/FractalDAO.sol";
  * @dev Run with: halmos --contract FractalDAOHalmosTest --solver-timeout-assertion 300
  *
  * Critical Invariants Verified:
- *   1. Structural identity preservation across scales
+ *   1. Structural identity preservation across scales (KEY INVARIANT)
  *   2. Pattern uniqueness
  *   3. Scale boundary enforcement
  *   4. Voting integrity
+ *
+ * Constitutional Alignment: Resonant Coherence (Harmony 1), Subsidiarity
+ * Governance patterns must be structurally identical at all scales, ensuring
+ * that the same rules apply whether at Individual or Global level.
  */
 
 contract FractalDAOHalmosTest is Test {
@@ -40,6 +45,15 @@ contract FractalDAOHalmosTest is Test {
     /**
      * @notice Verify child pattern inherits parent's structural identity exactly.
      * @dev KEY INVARIANT: quorum, supermajority, and mechanism must be identical.
+     *
+     * Structural Identity Invariant (Downward Replication):
+     * When a pattern is replicated to a child scale:
+     *   child.quorumBps == parent.quorumBps
+     *   child.supermajorityBps == parent.supermajorityBps
+     *   child.mechanism == parent.mechanism
+     *
+     * This ensures fractal self-similarity: the same governance rules apply
+     * at Community level as at Team level as at Individual level.
      */
     function check_structural_identity_child(
         bytes32 parentId,
@@ -181,6 +195,10 @@ contract FractalDAOHalmosTest is Test {
     /**
      * @notice Verify pattern IDs are unique and cannot be reused.
      * @dev Tests that duplicate pattern creation fails.
+     *
+     * Pattern Uniqueness Invariant:
+     * Each pattern ID can only be used once. This prevents pattern
+     * hijacking and ensures governance integrity.
      */
     function check_pattern_uniqueness(
         bytes32 patternId,
@@ -202,8 +220,8 @@ contract FractalDAOHalmosTest is Test {
         FractalDAO.GovernancePattern memory pattern = dao.getPattern(patternId);
         assert(pattern.exists == true);
 
-        // Second creation should revert
-        vm.expectRevert("FractalDAO: pattern exists");
+        // Second creation should revert with custom error
+        vm.expectRevert(abi.encodeWithSelector(PatternAlreadyExists.selector, patternId));
         dao.createPattern(
             patternId,
             FractalDAO.GovernanceScale.Community,
@@ -220,6 +238,10 @@ contract FractalDAOHalmosTest is Test {
     /**
      * @notice Verify cannot replicate below Individual scale.
      * @dev Tests lower boundary of scale hierarchy.
+     *
+     * Scale Floor Invariant:
+     * Individual is the lowest governance scale. No pattern can
+     * be replicated below this level.
      */
     function check_cannot_scale_below_individual(bytes32 parentId, bytes32 childId) public {
         vm.assume(parentId != childId);
@@ -233,14 +255,18 @@ contract FractalDAOHalmosTest is Test {
             FractalDAO.DecisionMechanism.Consent
         );
 
-        // Should revert when trying to go below Individual
-        vm.expectRevert("FractalDAO: cannot go below Individual");
+        // Should revert when trying to go below Individual with custom error
+        vm.expectRevert(abi.encodeWithSelector(CannotScaleBelowIndividual.selector, parentId));
         dao.replicateToChildScale(parentId, childId);
     }
 
     /**
      * @notice Verify cannot replicate above Global scale.
      * @dev Tests upper boundary of scale hierarchy.
+     *
+     * Scale Ceiling Invariant:
+     * Global is the highest governance scale. No pattern can
+     * be replicated above this level.
      */
     function check_cannot_scale_above_global(bytes32 childId, bytes32 parentId) public {
         vm.assume(childId != parentId);
@@ -254,8 +280,8 @@ contract FractalDAOHalmosTest is Test {
             FractalDAO.DecisionMechanism.Consent
         );
 
-        // Should revert when trying to go above Global
-        vm.expectRevert("FractalDAO: cannot go above Global");
+        // Should revert when trying to go above Global with custom error
+        vm.expectRevert(abi.encodeWithSelector(CannotScaleAboveGlobal.selector, childId));
         dao.replicateToParentScale(childId, parentId);
     }
 
@@ -314,8 +340,14 @@ contract FractalDAOHalmosTest is Test {
     /**
      * @notice Verify voters cannot vote twice.
      * @dev Tests double-vote prevention.
+     *
+     * One-Vote-Per-Voter Invariant:
+     * Each address can only vote once per proposal. This prevents
+     * vote manipulation and ensures fair representation.
      */
     function check_no_double_voting(bytes32 patternId, bytes32 proposalId) public {
+        vm.assume(patternId != proposalId);
+
         dao.createPattern(
             patternId,
             FractalDAO.GovernanceScale.Team,
@@ -330,9 +362,9 @@ contract FractalDAOHalmosTest is Test {
         vm.prank(voter1);
         dao.vote(proposalId, true);
 
-        // Second vote fails
+        // Second vote fails with custom error
         vm.prank(voter1);
-        vm.expectRevert("FractalDAO: already voted");
+        vm.expectRevert(abi.encodeWithSelector(AlreadyVoted.selector, proposalId, voter1));
         dao.vote(proposalId, false);
     }
 
@@ -389,6 +421,10 @@ contract FractalDAOHalmosTest is Test {
     /**
      * @notice Verify pattern count is accurate after operations.
      * @dev Tests patternCount tracking.
+     *
+     * Pattern Count Consistency Invariant:
+     * patternCount always equals allPatterns.length and accurately
+     * reflects the number of patterns created (including replications).
      */
     function check_pattern_count_consistency(
         bytes32 pattern1,
@@ -424,5 +460,114 @@ contract FractalDAOHalmosTest is Test {
         // Verify all patterns in array
         bytes32[] memory allPatterns = dao.getAllPatterns();
         assert(allPatterns.length == 3);
+    }
+
+    // =========================================================================
+    // Invariant 7: Multi-Level Structural Identity
+    // =========================================================================
+
+    /**
+     * @notice Verify structural identity is preserved across multiple levels.
+     * @dev Tests that replicating down multiple levels maintains identity.
+     *
+     * Transitive Structural Identity:
+     * If A replicates to B and B replicates to C, then:
+     *   A.quorumBps == B.quorumBps == C.quorumBps
+     *   A.supermajorityBps == B.supermajorityBps == C.supermajorityBps
+     *   A.mechanism == B.mechanism == C.mechanism
+     */
+    function check_multi_level_structural_identity(
+        bytes32 globalId,
+        bytes32 regionalId,
+        bytes32 sectorId,
+        uint256 quorumBps,
+        uint256 supermajorityBps,
+        uint8 mechanismVal
+    ) public {
+        vm.assume(globalId != regionalId);
+        vm.assume(regionalId != sectorId);
+        vm.assume(globalId != sectorId);
+        vm.assume(quorumBps > 0 && quorumBps <= BPS_DENOMINATOR);
+        vm.assume(supermajorityBps >= 5000 && supermajorityBps <= BPS_DENOMINATOR);
+        vm.assume(mechanismVal <= 3);
+
+        FractalDAO.DecisionMechanism mechanism = FractalDAO.DecisionMechanism(mechanismVal);
+
+        // Create at Global scale
+        dao.createPattern(
+            globalId,
+            FractalDAO.GovernanceScale.Global,
+            quorumBps,
+            supermajorityBps,
+            mechanism
+        );
+
+        // Replicate down to Regional
+        dao.replicateToChildScale(globalId, regionalId);
+
+        // Replicate down to Sector
+        dao.replicateToChildScale(regionalId, sectorId);
+
+        FractalDAO.GovernancePattern memory global = dao.getPattern(globalId);
+        FractalDAO.GovernancePattern memory regional = dao.getPattern(regionalId);
+        FractalDAO.GovernancePattern memory sector = dao.getPattern(sectorId);
+
+        // CRITICAL INVARIANT: All three levels have identical structure
+        assert(global.quorumBps == regional.quorumBps);
+        assert(regional.quorumBps == sector.quorumBps);
+        assert(global.supermajorityBps == regional.supermajorityBps);
+        assert(regional.supermajorityBps == sector.supermajorityBps);
+        assert(global.mechanism == regional.mechanism);
+        assert(regional.mechanism == sector.mechanism);
+
+        // Verify scales are correctly ordered
+        assert(uint8(global.scale) == uint8(FractalDAO.GovernanceScale.Global));
+        assert(uint8(regional.scale) == uint8(FractalDAO.GovernanceScale.Regional));
+        assert(uint8(sector.scale) == uint8(FractalDAO.GovernanceScale.Sector));
+    }
+
+    // =========================================================================
+    // Invariant 8: Child-Parent Linkage
+    // =========================================================================
+
+    /**
+     * @notice Verify child patterns correctly reference their parents.
+     * @dev Tests the parentPatternId linkage.
+     */
+    function check_child_parent_linkage(
+        bytes32 parentId,
+        bytes32 childId,
+        uint256 quorumBps,
+        uint256 supermajorityBps
+    ) public {
+        vm.assume(parentId != childId);
+        vm.assume(quorumBps > 0 && quorumBps <= BPS_DENOMINATOR);
+        vm.assume(supermajorityBps >= 5000 && supermajorityBps <= BPS_DENOMINATOR);
+
+        dao.createPattern(
+            parentId,
+            FractalDAO.GovernanceScale.Sector,
+            quorumBps,
+            supermajorityBps,
+            FractalDAO.DecisionMechanism.Consent
+        );
+
+        dao.replicateToChildScale(parentId, childId);
+
+        FractalDAO.GovernancePattern memory child = dao.getPattern(childId);
+
+        // INVARIANT: Child correctly references parent
+        assert(child.parentPatternId == parentId);
+
+        // Verify child is in parent's children array
+        bytes32[] memory children = dao.getChildPatterns(parentId);
+        bool foundChild = false;
+        for (uint256 i = 0; i < children.length; i++) {
+            if (children[i] == childId) {
+                foundChild = true;
+                break;
+            }
+        }
+        assert(foundChild);
     }
 }

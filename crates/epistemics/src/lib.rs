@@ -20,12 +20,12 @@
 //! All four primitives implement the `LivingPrimitive` trait from `living-core`
 //! and emit events consumed by the Metabolism Cycle orchestrator.
 
-pub mod shadow_integration;
-pub mod negative_capability;
-pub mod silence_signal;
 pub mod beauty_validity;
+pub mod negative_capability;
+pub mod shadow_integration;
+pub mod silence_signal;
 
-pub use shadow_integration::*;
-pub use negative_capability::*;
-pub use silence_signal::*;
 pub use beauty_validity::*;
+pub use negative_capability::*;
+pub use shadow_integration::*;
+pub use silence_signal::*;

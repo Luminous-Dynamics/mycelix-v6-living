@@ -44,14 +44,12 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use living_core::{
-    CyclePhase, Did, Gate1Check, Gate2Warning, KenosisCommitment,
-    LivingProtocolEvent, EventBus,
-    KenosisCommittedEvent, KenosisExecutedEvent,
-    KenosisConfig,
-};
-use living_core::traits::{LivingPrimitive, PrimitiveModule};
 use living_core::error::{LivingProtocolError, LivingResult};
+use living_core::traits::{LivingPrimitive, PrimitiveModule};
+use living_core::{
+    CyclePhase, Did, EventBus, Gate1Check, Gate2Warning, KenosisCommitment, KenosisCommittedEvent,
+    KenosisConfig, KenosisExecutedEvent, LivingProtocolEvent,
+};
 
 // =============================================================================
 // Agent Reputation Tracker (internal)
@@ -191,16 +189,18 @@ impl KenosisEngine {
     ///
     /// The commitment must exist and belong to a registered agent.
     pub fn execute_kenosis(&mut self, commitment_id: &str) -> LivingResult<(f64, f64)> {
-        let commitment = self.commitments.get(commitment_id).ok_or_else(|| {
-            LivingProtocolError::AgentNotFound(commitment_id.to_string())
-        })?;
+        let commitment = self
+            .commitments
+            .get(commitment_id)
+            .ok_or_else(|| LivingProtocolError::AgentNotFound(commitment_id.to_string()))?;
 
         let agent_did = commitment.agent_did.clone();
         let reputation_released = commitment.reputation_released;
 
-        let state = self.agents.get_mut(&agent_did).ok_or_else(|| {
-            LivingProtocolError::AgentNotFound(agent_did.clone())
-        })?;
+        let state = self
+            .agents
+            .get_mut(&agent_did)
+            .ok_or_else(|| LivingProtocolError::AgentNotFound(agent_did.clone()))?;
 
         let before = state.reputation;
         state.reputation = (state.reputation - reputation_released).max(0.0);
@@ -210,15 +210,14 @@ impl KenosisEngine {
         let now = Utc::now();
 
         // Emit execution event
-        self.event_bus.publish(LivingProtocolEvent::KenosisExecuted(
-            KenosisExecutedEvent {
+        self.event_bus
+            .publish(LivingProtocolEvent::KenosisExecuted(KenosisExecutedEvent {
                 commitment_id: commitment_id.to_string(),
                 agent_did: agent_did.clone(),
                 reputation_before: before,
                 reputation_after: after,
                 timestamp: now,
-            },
-        ));
+            }));
 
         tracing::info!(
             agent_did = %agent_did,
@@ -333,16 +332,17 @@ impl KenosisEngine {
             .insert(commitment_id.clone(), commitment.clone());
 
         // Emit commitment event
-        self.event_bus.publish(LivingProtocolEvent::KenosisCommitted(
-            KenosisCommittedEvent {
-                commitment_id: commitment_id.clone(),
-                agent_did: agent_did.to_string(),
-                release_percentage: effective_percentage,
-                reputation_released,
-                cycle_number: self.current_cycle,
-                timestamp: now,
-            },
-        ));
+        self.event_bus
+            .publish(LivingProtocolEvent::KenosisCommitted(
+                KenosisCommittedEvent {
+                    commitment_id: commitment_id.clone(),
+                    agent_did: agent_did.to_string(),
+                    release_percentage: effective_percentage,
+                    reputation_released,
+                    cycle_number: self.current_cycle,
+                    timestamp: now,
+                },
+            ));
 
         tracing::info!(
             agent_did = %agent_did,
@@ -377,10 +377,7 @@ impl LivingPrimitive for KenosisEngine {
         2
     }
 
-    fn on_phase_change(
-        &mut self,
-        new_phase: CyclePhase,
-    ) -> LivingResult<Vec<LivingProtocolEvent>> {
+    fn on_phase_change(&mut self, new_phase: CyclePhase) -> LivingResult<Vec<LivingProtocolEvent>> {
         self.active = new_phase == CyclePhase::Kenosis;
         Ok(Vec::new())
     }
@@ -458,9 +455,10 @@ impl LivingPrimitive for KenosisEngine {
         for (did, state) in &self.agents {
             let max_cycles = state.cycle_releases.len();
             if max_cycles >= 3 {
-                let always_max = state.cycle_releases.values().all(|r| {
-                    (*r - self.config.max_release_per_cycle).abs() < f64::EPSILON
-                });
+                let always_max = state
+                    .cycle_releases
+                    .values()
+                    .all(|r| (*r - self.config.max_release_per_cycle).abs() < f64::EPSILON);
                 if always_max {
                     warnings.push(Gate2Warning {
                         harmony_violated: "Evolutionary Progression (Harmony 7)".to_string(),
@@ -712,7 +710,10 @@ mod tests {
         engine.commit_kenosis("did:agent1", 0.15).unwrap();
 
         let checks = engine.gate1_check();
-        assert!(checks.iter().all(|c| c.passed), "All Gate 1 checks should pass");
+        assert!(
+            checks.iter().all(|c| c.passed),
+            "All Gate 1 checks should pass"
+        );
     }
 
     #[test]
@@ -720,7 +721,7 @@ mod tests {
         let mut engine = make_engine();
         setup_agent(&mut engine, "did:agent1", 100.0);
 
-        let commitment = engine.commit_kenosis("did:agent1", 0.10).unwrap();
+        let _commitment = engine.commit_kenosis("did:agent1", 0.10).unwrap();
 
         let checks = engine.gate1_check();
         let irrevocable_check = checks

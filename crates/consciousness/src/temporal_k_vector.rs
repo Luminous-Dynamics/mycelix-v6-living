@@ -19,15 +19,11 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
-use living_core::{
-    Did, KVectorSignature, TemporalKVector,
-    TemporalKVectorUpdatedEvent,
-    LivingProtocolEvent,
-    Gate1Check, Gate2Warning,
-    CyclePhase,
-    LivingProtocolError, LivingResult,
-};
 use living_core::traits::{LivingPrimitive, PrimitiveModule};
+use living_core::{
+    CyclePhase, Did, Gate1Check, Gate2Warning, KVectorSignature, LivingProtocolError,
+    LivingProtocolEvent, LivingResult, TemporalKVector, TemporalKVectorUpdatedEvent,
+};
 
 /// Default maximum history length per agent.
 const DEFAULT_MAX_HISTORY: usize = 365;
@@ -295,10 +291,7 @@ impl LivingPrimitive for TemporalKVectorService {
                 details: if all_finite {
                     None
                 } else {
-                    Some(format!(
-                        "Agent {} has non-finite derivative values",
-                        did
-                    ))
+                    Some(format!("Agent {} has non-finite derivative values", did))
                 },
             });
         }
@@ -314,10 +307,7 @@ impl LivingPrimitive for TemporalKVectorService {
                 details: if in_bounds {
                     None
                 } else {
-                    Some(format!(
-                        "Agent {} has K-Vector values outside [0, 1]",
-                        did
-                    ))
+                    Some(format!("Agent {} has K-Vector values outside [0, 1]", did))
                 },
             });
         }
@@ -437,13 +427,19 @@ mod tests {
         let initial = make_kvec_at([0.5; 8], base_time);
         service.register_agent(&did, initial);
 
-        let update1 = make_kvec_at([0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], base_time + Duration::days(1));
+        let update1 = make_kvec_at(
+            [0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+            base_time + Duration::days(1),
+        );
         service.update_observation(&did, update1).unwrap();
 
         let vel = service.get_velocity(&did).unwrap();
         assert!(vel[0] > 0.09);
 
-        let update2 = make_kvec_at([0.8, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], base_time + Duration::days(2));
+        let update2 = make_kvec_at(
+            [0.8, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+            base_time + Duration::days(2),
+        );
         service.update_observation(&did, update2).unwrap();
 
         let accel = service.get_acceleration(&did).unwrap();

@@ -64,8 +64,11 @@ pub trait ReputationAware {
 /// Trait for primitives that interact with the DKG.
 pub trait DkgAware {
     /// Publish a nutrient/learning to the DKG.
-    fn publish_to_dkg(&self, content: &str, classification: crate::types::EpistemicClassification)
-        -> LivingResult<String>;
+    fn publish_to_dkg(
+        &self,
+        content: &str,
+        classification: crate::types::EpistemicClassification,
+    ) -> LivingResult<String>;
 
     /// Query the DKG for related content.
     fn query_dkg(&self, query: &str) -> LivingResult<Vec<String>>;

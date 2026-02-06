@@ -123,7 +123,10 @@ async fn test_get_cycle_state() {
 
     let response = rpc_call(&mut ws, "1", "getCycleState", None).await;
 
-    assert!(response.get("result").is_some(), "Expected result in response");
+    assert!(
+        response.get("result").is_some(),
+        "Expected result in response"
+    );
     let result = response.get("result").unwrap();
 
     assert!(result.get("cycleNumber").is_some());
@@ -356,11 +359,20 @@ async fn start_test_server_with_health() -> (SocketAddr, SocketAddr, oneshot::Se
 /// Helper to make an HTTP request and get response body.
 async fn http_get(addr: SocketAddr, path: &str) -> (String, String) {
     let mut stream = TcpStream::connect(addr).await.expect("Failed to connect");
-    let request = format!("GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", path, addr);
-    stream.write_all(request.as_bytes()).await.expect("Failed to write");
+    let request = format!(
+        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+        path, addr
+    );
+    stream
+        .write_all(request.as_bytes())
+        .await
+        .expect("Failed to write");
 
     let mut response = String::new();
-    stream.read_to_string(&mut response).await.expect("Failed to read");
+    stream
+        .read_to_string(&mut response)
+        .await
+        .expect("Failed to read");
 
     // Parse status and body
     let parts: Vec<&str> = response.splitn(2, "\r\n\r\n").collect();
@@ -377,7 +389,11 @@ async fn test_health_endpoint() {
 
     let (status, body) = http_get(health_addr, "/health").await;
 
-    assert!(status.contains("200 OK"), "Expected 200 OK, got: {}", status);
+    assert!(
+        status.contains("200 OK"),
+        "Expected 200 OK, got: {}",
+        status
+    );
     let response: Value = serde_json::from_str(&body).expect("Invalid JSON");
     assert_eq!(response["status"], "healthy");
 }
@@ -388,7 +404,11 @@ async fn test_metrics_endpoint() {
 
     let (status, body) = http_get(health_addr, "/metrics").await;
 
-    assert!(status.contains("200 OK"), "Expected 200 OK, got: {}", status);
+    assert!(
+        status.contains("200 OK"),
+        "Expected 200 OK, got: {}",
+        status
+    );
     let response: Value = serde_json::from_str(&body).expect("Invalid JSON");
 
     assert!(response.get("activeConnections").is_some());
@@ -403,7 +423,11 @@ async fn test_state_endpoint() {
 
     let (status, body) = http_get(health_addr, "/state").await;
 
-    assert!(status.contains("200 OK"), "Expected 200 OK, got: {}", status);
+    assert!(
+        status.contains("200 OK"),
+        "Expected 200 OK, got: {}",
+        status
+    );
     let response: Value = serde_json::from_str(&body).expect("Invalid JSON");
 
     assert!(response.get("cycleNumber").is_some());

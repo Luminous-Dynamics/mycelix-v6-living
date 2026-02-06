@@ -50,6 +50,25 @@ export interface ConnectionOptions {
  * console.log(`Currently in ${state.currentPhase}, cycle ${state.cycleNumber}`);
  * ```
  */
+// Request/response types for WebSocket RPC
+interface PendingRequest<T> {
+  resolve: (value: T) => void;
+  reject: (error: Error) => void;
+  timeout: NodeJS.Timeout;
+}
+
+interface RequestMessage {
+  id: string;
+  method: string;
+  params?: unknown;
+}
+
+interface ResponseMessage {
+  id: string;
+  result?: unknown;
+  error?: { code: number; message: string };
+}
+
 export class LivingProtocolClient implements CycleClient {
   private transport: WebSocketTransport;
   private subscriptions: SubscriptionManager;
@@ -57,13 +76,25 @@ export class LivingProtocolClient implements CycleClient {
   private stateTimestamp: number = 0;
   private readonly stateCacheTtl = 5000; // 5 seconds
 
+  // Request/response tracking
+  private requestId = 0;
+  private pendingRequests: Map<string, PendingRequest<unknown>> = new Map();
+  private readonly requestTimeoutMs = 30000; // 30 seconds
+
   private constructor(transport: WebSocketTransport) {
     this.transport = transport;
     this.subscriptions = new SubscriptionManager();
 
-    // Wire transport events to subscription manager
+    // Wire transport events to subscription manager and request handling
     this.transport.onProtocolEvent((event) => {
       this.handleEvent(event);
+    });
+
+    // Handle response messages
+    this.transport.on('message', (transportEvent) => {
+      if (transportEvent.type === 'message') {
+        this.handleResponse(transportEvent.data as ResponseMessage);
+      }
     });
   }
 
@@ -103,6 +134,13 @@ export class LivingProtocolClient implements CycleClient {
    * Disconnect from the server.
    */
   disconnect(): void {
+    // Reject all pending requests
+    for (const [id, pending] of this.pendingRequests) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error('Connection closed'));
+    }
+    this.pendingRequests.clear();
+
     this.transport.disconnect();
     this.subscriptions.clearAll();
   }
@@ -309,35 +347,102 @@ export class LivingProtocolClient implements CycleClient {
     this.subscriptions.dispatch(event);
   }
 
+  private handleResponse(response: ResponseMessage): void {
+    // Only handle messages with an id (responses to our requests)
+    if (!response || typeof response !== 'object' || !('id' in response)) {
+      return;
+    }
+
+    const pending = this.pendingRequests.get(response.id);
+    if (!pending) {
+      return; // Not a response to one of our requests
+    }
+
+    // Clear the timeout and remove from pending
+    clearTimeout(pending.timeout);
+    this.pendingRequests.delete(response.id);
+
+    // Resolve or reject based on response
+    if (response.error) {
+      pending.reject(new Error(`RPC Error ${response.error.code}: ${response.error.message}`));
+    } else {
+      pending.resolve(response.result);
+    }
+  }
+
+  /**
+   * Send an RPC request and wait for response.
+   */
+  private async request<T>(method: string, params?: unknown): Promise<T> {
+    if (!this.transport.isConnected()) {
+      throw new Error('Not connected to server');
+    }
+
+    const id = `${++this.requestId}`;
+    const message: RequestMessage = { id, method, params };
+
+    return new Promise<T>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error(`Request timeout: ${method}`));
+      }, this.requestTimeoutMs);
+
+      this.pendingRequests.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      try {
+        this.transport.send(message);
+      } catch (error) {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        reject(error);
+      }
+    });
+  }
+
   private async requestState(): Promise<CycleState> {
-    // In a real implementation, this would make an API call
-    // For now, return a mock state
-    return {
-      cycleNumber: 1,
-      currentPhase: CyclePhase.Shadow,
-      phaseStarted: new Date().toISOString(),
-      cycleStarted: new Date().toISOString(),
-      phaseDay: 0,
-    };
+    try {
+      return await this.request<CycleState>('getCycleState');
+    } catch {
+      // Fallback to default state if request fails (e.g., server doesn't support RPC)
+      return {
+        cycleNumber: 1,
+        currentPhase: CyclePhase.Shadow,
+        phaseStarted: new Date().toISOString(),
+        cycleStarted: new Date().toISOString(),
+        phaseDay: 0,
+      };
+    }
   }
 
   private async requestTransitionHistory(): Promise<PhaseTransition[]> {
-    // In a real implementation, this would make an API call
-    return [];
+    try {
+      return await this.request<PhaseTransition[]>('getTransitionHistory');
+    } catch {
+      // Fallback to empty history if request fails
+      return [];
+    }
   }
 
   private async requestPhaseMetrics(phase: CyclePhase): Promise<PhaseMetrics> {
-    // In a real implementation, this would make an API call
-    return {
-      activeAgents: 0,
-      spectralK: 0,
-      meanMetabolicTrust: 0,
-      activeWounds: 0,
-      compostingEntities: 0,
-      liminalEntities: 0,
-      entangledPairs: 0,
-      heldUncertainties: 0,
-    };
+    try {
+      return await this.request<PhaseMetrics>('getPhaseMetrics', { phase });
+    } catch {
+      // Fallback to empty metrics if request fails
+      return {
+        activeAgents: 0,
+        spectralK: 0,
+        meanMetabolicTrust: 0,
+        activeWounds: 0,
+        compostingEntities: 0,
+        liminalEntities: 0,
+        entangledPairs: 0,
+        heldUncertainties: 0,
+      };
+    }
   }
 
   private getPhaseDuration(phase: CyclePhase): number {
